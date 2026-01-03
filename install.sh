@@ -55,16 +55,12 @@ else
 fi
 
 # ===========================================
-# 3. Instalar Certbot
+# 3. Instalar Certbot y plugin nginx
 # ===========================================
 echo -e "${YELLOW}[3/9] Verificando Certbot...${NC}"
-if ! command -v certbot &> /dev/null; then
-    apt-get update
-    apt-get install -y certbot python3-certbot-nginx
-    echo -e "${GREEN}Certbot instalado${NC}"
-else
-    echo -e "${GREEN}Certbot OK${NC}"
-fi
+apt-get update -qq
+apt-get install -y certbot python3-certbot-nginx
+echo -e "${GREEN}Certbot instalado${NC}"
 
 # ===========================================
 # 4. Configurar directorio
@@ -142,13 +138,20 @@ docker-compose up -d
 # Esperar a que el contenedor web esté listo
 echo "Esperando que los servicios estén listos (puede tomar 1-2 minutos)..."
 
+sleep 15  # Dar tiempo inicial para que arranquen los servicios
+
 for i in {1..60}; do
-    if docker exec solupark_web curl -sf http://localhost:8000/health/ > /dev/null 2>&1; then
-        echo -e "${GREEN}Aplicación lista!${NC}"
-        break
-    fi
+    # Verificar si el contenedor está corriendo
+    WEB_STATUS=$(docker inspect --format='{{.State.Status}}' solupark_web 2>/dev/null || echo "not_found")
     
-    WEB_STATUS=$(docker inspect --format='{{.State.Status}}' solupark_web 2>/dev/null || echo "starting")
+    if [ "$WEB_STATUS" = "running" ]; then
+        # Verificar si la app responde
+        HEALTH=$(docker exec solupark_web curl -sf http://localhost:8000/health/ 2>/dev/null || echo "")
+        if [ -n "$HEALTH" ]; then
+            echo -e "${GREEN}Aplicación lista!${NC}"
+            break
+        fi
+    fi
     
     if [ "$WEB_STATUS" = "exited" ]; then
         echo -e "${RED}Error: El contenedor web falló${NC}"
@@ -156,9 +159,15 @@ for i in {1..60}; do
         exit 1
     fi
     
-    echo "Esperando... ($i/60)"
+    echo "Esperando... ($i/60) - Estado: $WEB_STATUS"
     sleep 3
 done
+
+# Verificar que realmente esté funcionando
+if ! docker exec solupark_web curl -sf http://localhost:8000/health/ > /dev/null 2>&1; then
+    echo -e "${YELLOW}Advertencia: La app puede no estar lista. Verificando logs...${NC}"
+    docker-compose logs --tail=20 web
+fi
 
 # ===========================================
 # 8. Configurar Nginx
