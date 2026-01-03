@@ -7,8 +7,12 @@ urlpatterns = [
     path('pendientes/', views.pending_payments, name='pending_payments'),
     path('historial-pagos/', views.payment_history, name='payment_history'),
     path('<uuid:pk>/', views.contract_detail, name='contract_detail'),
+    path('<uuid:pk>/editar/', views.contract_edit, name='contract_edit'),
+    path('<uuid:pk>/eliminar/', views.contract_delete, name='contract_delete'),
     path('<uuid:pk>/pago/', views.contract_payment, name='contract_payment'),
     path('<uuid:pk>/renovar/', views.contract_renew, name='contract_renew'),
+    path('<uuid:pk>/agregar-vehiculo/', views.add_contract_vehicle, name='add_contract_vehicle'),
+    path('<uuid:pk>/vehiculo/<uuid:vehicle_pk>/eliminar/', views.remove_contract_vehicle, name='remove_contract_vehicle'),
     path('recibo/<uuid:payment_id>/', views.print_payment_receipt, name='print_payment_receipt'),
-    path('api/vehiculos/', views.get_vehicle_info, name='get_vehicle_info'),
+    path('api/vehiculos-cliente/', views.get_client_vehicles, name='get_client_vehicles'),
 ]

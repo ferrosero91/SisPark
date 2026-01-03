@@ -127,7 +127,62 @@ def vehicle_add(request, pk):
     
     return render(request, 'third_parties/vehicle_form.html', {
         'form': form,
-        'third_party': third_party
+        'third_party': third_party,
+        'title': 'Agregar Vehículo'
+    })
+
+
+@login_required
+def vehicle_edit(request, pk, vehicle_pk):
+    """Editar un vehículo"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    third_party = get_object_or_404(ThirdParty.objects.all_tenants(), pk=pk, tenant=tenant)
+    vehicle = get_object_or_404(ThirdPartyVehicle, pk=vehicle_pk, third_party=third_party)
+    
+    if request.method == 'POST':
+        form = ThirdPartyVehicleForm(request.POST, instance=vehicle)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Vehículo {vehicle.plate} actualizado')
+            return redirect('third_party_detail', pk=pk)
+    else:
+        form = ThirdPartyVehicleForm(instance=vehicle)
+    
+    return render(request, 'third_parties/vehicle_form.html', {
+        'form': form,
+        'third_party': third_party,
+        'vehicle': vehicle,
+        'title': 'Editar Vehículo'
+    })
+
+
+@login_required
+def vehicle_delete(request, pk, vehicle_pk):
+    """Eliminar un vehículo"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    third_party = get_object_or_404(ThirdParty.objects.all_tenants(), pk=pk, tenant=tenant)
+    vehicle = get_object_or_404(ThirdPartyVehicle, pk=vehicle_pk, third_party=third_party)
+    
+    if request.method == 'POST':
+        plate = vehicle.plate
+        # Verificar si tiene contratos activos
+        if vehicle.contracts.filter(is_active=True).exists():
+            messages.error(request, f'No se puede eliminar el vehículo {plate} porque tiene contratos activos')
+            return redirect('third_party_detail', pk=pk)
+        
+        vehicle.delete()
+        messages.success(request, f'Vehículo {plate} eliminado')
+        return redirect('third_party_detail', pk=pk)
+    
+    return render(request, 'third_parties/vehicle_confirm_delete.html', {
+        'third_party': third_party,
+        'vehicle': vehicle
     })
 
 

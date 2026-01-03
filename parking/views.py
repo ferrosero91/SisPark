@@ -454,6 +454,7 @@ class ReportView(TemplateView):
         tenant = get_tenant_from_user(self.request.user)
         report_type = self.request.GET.get('type', 'general')
         period = self.request.GET.get('period', 'today')
+        page = self.request.GET.get('page', 1)
 
         # Usar hora local de Colombia
         today = timezone.localtime(timezone.now())
@@ -488,16 +489,16 @@ class ReportView(TemplateView):
             end_date = today.replace(hour=23, minute=59, second=59, microsecond=999999)
 
         if tenant:
-            tickets = ParkingTicket.objects.all_tenants().filter(
+            tickets_qs = ParkingTicket.objects.all_tenants().filter(
                 tenant=tenant,
                 exit_time__isnull=False,
                 exit_time__range=(start_date, end_date)
             ).exclude(amount_paid__isnull=True).select_related('category', 'payment_method')
         else:
-            tickets = ParkingTicket.objects.none()
+            tickets_qs = ParkingTicket.objects.none()
 
-        # Resumen general
-        summary = tickets.aggregate(
+        # Resumen general (usando agregación, no carga todos los registros)
+        summary = tickets_qs.aggregate(
             total_vehicles=Count('id'),
             total_revenue=Sum('amount_paid'),
             avg_duration=Avg(F('exit_time') - F('entry_time')),
@@ -507,41 +508,46 @@ class ReportView(TemplateView):
         if summary['avg_duration'] is not None:
             summary['avg_duration'] = summary['avg_duration'].total_seconds() / 3600
 
-        # Por categoría
-        category_stats = list(tickets.values('category__name').annotate(
+        # Por categoría (agregación)
+        category_stats = list(tickets_qs.values('category__name').annotate(
             count=Count('id'),
             revenue=Sum('amount_paid'),
         ).order_by('-revenue'))
 
-        # Por método de pago
+        # Por método de pago (agregación optimizada)
         from collections import defaultdict
         from decimal import Decimal
+        from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
         
-        payment_stats = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
-        for ticket in tickets:
-            method_name = ticket.payment_method.name if ticket.payment_method else 'Efectivo'
-            payment_stats[method_name]['count'] += 1
-            payment_stats[method_name]['total'] += ticket.amount_paid or Decimal('0')
-            if ticket.payment_method:
-                payment_stats[method_name]['icon'] = ticket.payment_method.icon
-                payment_stats[method_name]['is_cash'] = ticket.payment_method.payment_type == 'cash'
-            else:
-                payment_stats[method_name]['icon'] = 'fa-money-bill'
-                payment_stats[method_name]['is_cash'] = True
+        payment_method_stats = list(tickets_qs.values(
+            'payment_method__name', 
+            'payment_method__icon',
+            'payment_method__payment_type'
+        ).annotate(
+            count=Count('id'),
+            total=Sum('amount_paid')
+        ).order_by('-total'))
         
-        payment_stats_list = [{'name': k, **v} for k, v in payment_stats.items()]
-        payment_stats_list.sort(key=lambda x: -x['total'])
+        payment_stats_list = []
+        for stat in payment_method_stats:
+            payment_stats_list.append({
+                'name': stat['payment_method__name'] or 'Efectivo',
+                'icon': stat['payment_method__icon'] or 'fa-money-bill',
+                'is_cash': stat['payment_method__payment_type'] == 'cash' if stat['payment_method__payment_type'] else True,
+                'count': stat['count'],
+                'total': stat['total'] or Decimal('0')
+            })
 
-        # Ingresos diarios
-        daily_stats = list(tickets.annotate(
+        # Ingresos diarios (agregación)
+        daily_stats = list(tickets_qs.annotate(
             date=TruncDate('exit_time')
         ).values('date').annotate(
             count=Count('id'),
             revenue=Sum('amount_paid')
-        ).order_by('date'))
+        ).order_by('-date'))
 
-        # Vehículos frecuentes
-        frequent_vehicles = list(tickets.values('placa').annotate(
+        # Vehículos frecuentes (limitado a 10)
+        frequent_vehicles = list(tickets_qs.values('placa').annotate(
             visits=Count('id'),
             total_spent=Sum('amount_paid')
         ).order_by('-visits')[:10])
@@ -553,7 +559,7 @@ class ReportView(TemplateView):
             tenant=tenant,
             payment_date__range=(start_date, end_date),
             is_confirmed=True
-        ).select_related('payment_method', 'contract__third_party', 'contract__vehicle') if tenant else []
+        ).select_related('payment_method', 'contract__third_party').prefetch_related('contract__vehicles__vehicle') if tenant else []
         
         contracts_revenue = sum(p.amount for p in contract_payments)
         
@@ -563,12 +569,27 @@ class ReportView(TemplateView):
             tenant=tenant,
             is_active=True,
             end_date__lt=today_date
-        ).select_related('third_party', 'vehicle') if tenant else []
+        ).select_related('third_party').prefetch_related('vehicles__vehicle') if tenant else []
         
         pending_total = sum(c.monthly_rate for c in pending_contracts)
+        
+        # Contratos activos
+        active_contracts_count = MonthlyContract.objects.all_tenants().filter(
+            tenant=tenant,
+            is_active=True,
+            status='active'
+        ).count() if tenant else 0
 
-        # Historial de salidas (últimas 50)
-        recent_exits = tickets.order_by('-exit_time')[:50]
+        # Historial de salidas con PAGINACIÓN
+        tickets_ordered = tickets_qs.order_by('-exit_time')
+        paginator = Paginator(tickets_ordered, 10)  # 10 por página
+        
+        try:
+            recent_exits = paginator.page(page)
+        except PageNotAnInteger:
+            recent_exits = paginator.page(1)
+        except EmptyPage:
+            recent_exits = paginator.page(paginator.num_pages)
 
         context.update({
             'start_date': start_date,
@@ -584,6 +605,7 @@ class ReportView(TemplateView):
             'contracts_revenue': contracts_revenue,
             'pending_contracts': pending_contracts,
             'pending_total': pending_total,
+            'active_contracts_count': active_contracts_count,
             'recent_exits': recent_exits,
             'parking_lot': tenant,
             'total_general': float(summary['total_revenue'] or 0) + float(contracts_revenue),
@@ -593,18 +615,21 @@ class ReportView(TemplateView):
 
 @login_required
 def export_report_excel(request):
-    """Exportar reporte a Excel"""
+    """Exportar reporte completo a Excel"""
     import openpyxl
-    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill, NamedStyle
+    from openpyxl.utils import get_column_letter
     from django.http import HttpResponse
+    from collections import defaultdict
+    from decimal import Decimal
     
     tenant = get_tenant_from_user(request.user)
     start_str = request.GET.get('start_date', timezone.now().date().isoformat())
     end_str = request.GET.get('end_date', timezone.now().date().isoformat())
     
     try:
-        start_date = datetime.strptime(f"{start_str} 00:00:00", '%Y-%m-%d %H:%M:%S')
-        end_date = datetime.strptime(f"{end_str} 23:59:59", '%Y-%m-%d %H:%M:%S')
+        start_date = timezone.make_aware(datetime.strptime(f"{start_str} 00:00:00", '%Y-%m-%d %H:%M:%S'))
+        end_date = timezone.make_aware(datetime.strptime(f"{end_str} 23:59:59", '%Y-%m-%d %H:%M:%S'))
     except ValueError:
         start_date = end_date = timezone.now()
     
@@ -615,19 +640,31 @@ def export_report_excel(request):
         exit_time__range=(start_date, end_date)
     ).exclude(amount_paid__isnull=True).select_related('category', 'payment_method').order_by('-exit_time')
     
-    from monthly_contracts.models import ContractPayment
+    from monthly_contracts.models import ContractPayment, MonthlyContract
     contract_payments = ContractPayment.objects.filter(
         tenant=tenant,
         payment_date__range=(start_date, end_date),
         is_confirmed=True
-    ).select_related('payment_method', 'contract__third_party', 'contract__vehicle')
+    ).select_related('payment_method', 'contract__third_party').prefetch_related('contract__vehicles__vehicle')
+    
+    # Contratos vencidos
+    pending_contracts = MonthlyContract.objects.all_tenants().filter(
+        tenant=tenant,
+        is_active=True,
+        end_date__lt=timezone.now().date()
+    ).select_related('third_party').prefetch_related('vehicles__vehicle')
     
     # Crear workbook
     wb = openpyxl.Workbook()
     
     # Estilos
     header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    title_font = Font(bold=True, size=14, color="1E293B")
+    subtitle_font = Font(bold=True, size=11, color="64748B")
+    total_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+    total_font = Font(bold=True, size=11)
+    currency_font = Font(bold=True, color="059669")
     border = Border(
         left=Side(style='thin', color='E2E8F0'),
         right=Side(style='thin', color='E2E8F0'),
@@ -635,49 +672,221 @@ def export_report_excel(request):
         bottom=Side(style='thin', color='E2E8F0')
     )
     
-    # Hoja 1: Tickets de parqueadero
+    # ========== HOJA 1: RESUMEN ==========
     ws1 = wb.active
-    ws1.title = "Parqueadero"
+    ws1.title = "Resumen"
     
-    headers = ['Fecha', 'Placa', 'Categoría', 'Entrada', 'Salida', 'Duración', 'Método Pago', 'Monto']
+    # Título
+    ws1.merge_cells('A1:D1')
+    ws1['A1'] = f"REPORTE DE OPERACIONES - {tenant.name if tenant else 'SoluPark'}"
+    ws1['A1'].font = title_font
+    ws1['A1'].alignment = Alignment(horizontal='center')
+    
+    ws1.merge_cells('A2:D2')
+    ws1['A2'] = f"Período: {start_str} al {end_str}"
+    ws1['A2'].font = subtitle_font
+    ws1['A2'].alignment = Alignment(horizontal='center')
+    
+    # Totales
+    total_tickets = sum(float(t.amount_paid or 0) for t in tickets)
+    total_contracts = sum(float(p.amount or 0) for p in contract_payments)
+    total_pending = sum(float(c.monthly_rate or 0) for c in pending_contracts)
+    
+    row = 4
+    ws1[f'A{row}'] = "RESUMEN GENERAL"
+    ws1[f'A{row}'].font = Font(bold=True, size=12)
+    
+    row += 1
+    headers = ['Concepto', 'Cantidad', 'Total']
     for col, header in enumerate(headers, 1):
-        cell = ws1.cell(row=1, column=col, value=header)
+        cell = ws1.cell(row=row, column=col, value=header)
         cell.font = header_font
         cell.fill = header_fill
-        cell.alignment = Alignment(horizontal='center')
+        cell.border = border
     
-    for row, ticket in enumerate(tickets, 2):
-        duration = (ticket.exit_time - ticket.entry_time).total_seconds() / 3600
-        ws1.cell(row=row, column=1, value=ticket.exit_time.strftime('%d/%m/%Y'))
-        ws1.cell(row=row, column=2, value=ticket.placa)
-        ws1.cell(row=row, column=3, value=ticket.category.name if ticket.category else '')
-        ws1.cell(row=row, column=4, value=ticket.entry_time.strftime('%H:%M'))
-        ws1.cell(row=row, column=5, value=ticket.exit_time.strftime('%H:%M'))
-        ws1.cell(row=row, column=6, value=f"{duration:.1f}h")
-        ws1.cell(row=row, column=7, value=ticket.payment_method.name if ticket.payment_method else 'Efectivo')
-        ws1.cell(row=row, column=8, value=float(ticket.amount_paid or 0))
+    data = [
+        ('Tickets de Parqueadero', tickets.count(), total_tickets),
+        ('Pagos de Mensualidades', contract_payments.count(), total_contracts),
+        ('TOTAL INGRESOS', tickets.count() + contract_payments.count(), total_tickets + total_contracts),
+    ]
+    
+    for item in data:
+        row += 1
+        ws1.cell(row=row, column=1, value=item[0]).border = border
+        ws1.cell(row=row, column=2, value=item[1]).border = border
+        cell = ws1.cell(row=row, column=3, value=item[2])
+        cell.number_format = '"$"#,##0'
+        cell.border = border
+        if item[0] == 'TOTAL INGRESOS':
+            for c in range(1, 4):
+                ws1.cell(row=row, column=c).fill = total_fill
+                ws1.cell(row=row, column=c).font = total_font
+    
+    # Por método de pago
+    row += 2
+    ws1[f'A{row}'] = "INGRESOS POR MÉTODO DE PAGO"
+    ws1[f'A{row}'].font = Font(bold=True, size=12)
+    
+    payment_summary = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
+    for t in tickets:
+        method = t.payment_method.name if t.payment_method else 'Efectivo'
+        payment_summary[method]['count'] += 1
+        payment_summary[method]['total'] += t.amount_paid or Decimal('0')
+    for p in contract_payments:
+        method = p.payment_method.name if p.payment_method else 'Sin especificar'
+        payment_summary[method]['count'] += 1
+        payment_summary[method]['total'] += p.amount or Decimal('0')
+    
+    row += 1
+    headers = ['Método de Pago', 'Operaciones', 'Total']
+    for col, header in enumerate(headers, 1):
+        cell = ws1.cell(row=row, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    for method, data in sorted(payment_summary.items(), key=lambda x: -float(x[1]['total'])):
+        row += 1
+        ws1.cell(row=row, column=1, value=method).border = border
+        ws1.cell(row=row, column=2, value=data['count']).border = border
+        cell = ws1.cell(row=row, column=3, value=float(data['total']))
+        cell.number_format = '"$"#,##0'
+        cell.border = border
     
     # Ajustar anchos
-    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
-        ws1.column_dimensions[col].width = 14
+    ws1.column_dimensions['A'].width = 30
+    ws1.column_dimensions['B'].width = 15
+    ws1.column_dimensions['C'].width = 18
     
-    # Hoja 2: Mensualidades
-    ws2 = wb.create_sheet("Mensualidades")
-    headers2 = ['Fecha', 'Vehículo', 'Cliente', 'Método Pago', 'Monto']
-    for col, header in enumerate(headers2, 1):
-        cell = ws2.cell(row=1, column=col, value=header)
+    # ========== HOJA 2: PARQUEADERO ==========
+    ws2 = wb.create_sheet("Parqueadero")
+    
+    ws2.merge_cells('A1:H1')
+    ws2['A1'] = "DETALLE DE TICKETS DE PARQUEADERO"
+    ws2['A1'].font = title_font
+    
+    headers = ['Fecha', 'Hora Salida', 'Placa', 'Categoría', 'Entrada', 'Duración', 'Método Pago', 'Monto']
+    for col, header in enumerate(headers, 1):
+        cell = ws2.cell(row=3, column=col, value=header)
         cell.font = header_font
         cell.fill = header_fill
+        cell.border = border
     
-    for row, payment in enumerate(contract_payments, 2):
-        ws2.cell(row=row, column=1, value=payment.payment_date.strftime('%d/%m/%Y %H:%M'))
-        ws2.cell(row=row, column=2, value=payment.contract.vehicle.plate if payment.contract and payment.contract.vehicle else '')
-        ws2.cell(row=row, column=3, value=str(payment.contract.third_party) if payment.contract else '')
-        ws2.cell(row=row, column=4, value=payment.payment_method.name if payment.payment_method else '')
-        ws2.cell(row=row, column=5, value=float(payment.amount or 0))
+    row = 3
+    for ticket in tickets:
+        row += 1
+        duration = (ticket.exit_time - ticket.entry_time).total_seconds() / 3600
+        ws2.cell(row=row, column=1, value=ticket.exit_time.strftime('%d/%m/%Y')).border = border
+        ws2.cell(row=row, column=2, value=ticket.exit_time.strftime('%H:%M')).border = border
+        ws2.cell(row=row, column=3, value=ticket.placa).border = border
+        ws2.cell(row=row, column=4, value=ticket.category.name if ticket.category else '-').border = border
+        ws2.cell(row=row, column=5, value=ticket.entry_time.strftime('%H:%M')).border = border
+        ws2.cell(row=row, column=6, value=f"{duration:.1f}h").border = border
+        ws2.cell(row=row, column=7, value=ticket.payment_method.name if ticket.payment_method else 'Efectivo').border = border
+        cell = ws2.cell(row=row, column=8, value=float(ticket.amount_paid or 0))
+        cell.number_format = '"$"#,##0'
+        cell.border = border
     
-    for col in ['A', 'B', 'C', 'D', 'E']:
-        ws2.column_dimensions[col].width = 18
+    # Total
+    row += 1
+    ws2.cell(row=row, column=7, value="TOTAL").font = total_font
+    cell = ws2.cell(row=row, column=8, value=total_tickets)
+    cell.number_format = '"$"#,##0'
+    cell.font = currency_font
+    
+    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+        ws2.column_dimensions[col].width = 14
+    
+    # ========== HOJA 3: MENSUALIDADES ==========
+    ws3 = wb.create_sheet("Mensualidades")
+    
+    ws3.merge_cells('A1:F1')
+    ws3['A1'] = "PAGOS DE MENSUALIDADES"
+    ws3['A1'].font = title_font
+    
+    headers = ['Fecha', 'Cliente', 'Vehículos/Combo', 'Período', 'Método Pago', 'Monto']
+    for col, header in enumerate(headers, 1):
+        cell = ws3.cell(row=3, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    row = 3
+    for payment in contract_payments:
+        row += 1
+        ws3.cell(row=row, column=1, value=payment.payment_date.strftime('%d/%m/%Y %H:%M')).border = border
+        ws3.cell(row=row, column=2, value=str(payment.contract.third_party) if payment.contract else '-').border = border
+        
+        # Vehículos o combo
+        if payment.contract and payment.contract.use_combo_rate and payment.contract.combo_name:
+            vehicles_text = f"[COMBO] {payment.contract.combo_name}"
+        else:
+            vehicles_text = payment.contract.vehicles_list if payment.contract else '-'
+        ws3.cell(row=row, column=3, value=vehicles_text).border = border
+        
+        ws3.cell(row=row, column=4, value=f"{payment.get_month_name()} {payment.payment_year}").border = border
+        ws3.cell(row=row, column=5, value=payment.payment_method.name if payment.payment_method else '-').border = border
+        cell = ws3.cell(row=row, column=6, value=float(payment.amount or 0))
+        cell.number_format = '"$"#,##0'
+        cell.border = border
+    
+    # Total
+    row += 1
+    ws3.cell(row=row, column=5, value="TOTAL").font = total_font
+    cell = ws3.cell(row=row, column=6, value=total_contracts)
+    cell.number_format = '"$"#,##0'
+    cell.font = currency_font
+    
+    ws3.column_dimensions['A'].width = 18
+    ws3.column_dimensions['B'].width = 25
+    ws3.column_dimensions['C'].width = 25
+    ws3.column_dimensions['D'].width = 15
+    ws3.column_dimensions['E'].width = 15
+    ws3.column_dimensions['F'].width = 15
+    
+    # ========== HOJA 4: POR COBRAR ==========
+    ws4 = wb.create_sheet("Por Cobrar")
+    
+    ws4.merge_cells('A1:E1')
+    ws4['A1'] = "CONTRATOS VENCIDOS - CUENTAS POR COBRAR"
+    ws4['A1'].font = title_font
+    
+    headers = ['Cliente', 'Teléfono', 'Vehículos/Combo', 'Vencimiento', 'Tarifa Mensual']
+    for col, header in enumerate(headers, 1):
+        cell = ws4.cell(row=3, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = border
+    
+    row = 3
+    for contract in pending_contracts:
+        row += 1
+        ws4.cell(row=row, column=1, value=contract.third_party.full_name).border = border
+        ws4.cell(row=row, column=2, value=contract.third_party.phone or '-').border = border
+        
+        if contract.use_combo_rate and contract.combo_name:
+            vehicles_text = f"[COMBO] {contract.combo_name}"
+        else:
+            vehicles_text = contract.vehicles_list or 'Sin vehículos'
+        ws4.cell(row=row, column=3, value=vehicles_text).border = border
+        
+        ws4.cell(row=row, column=4, value=contract.end_date.strftime('%d/%m/%Y')).border = border
+        cell = ws4.cell(row=row, column=5, value=float(contract.monthly_rate or 0))
+        cell.number_format = '"$"#,##0'
+        cell.border = border
+    
+    # Total
+    row += 1
+    ws4.cell(row=row, column=4, value="TOTAL POR COBRAR").font = total_font
+    cell = ws4.cell(row=row, column=5, value=total_pending)
+    cell.number_format = '"$"#,##0'
+    cell.font = Font(bold=True, color="DC2626")
+    
+    ws4.column_dimensions['A'].width = 25
+    ws4.column_dimensions['B'].width = 15
+    ws4.column_dimensions['C'].width = 30
+    ws4.column_dimensions['D'].width = 15
+    ws4.column_dimensions['E'].width = 18
     
     # Respuesta
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -688,22 +897,24 @@ def export_report_excel(request):
 
 @login_required
 def export_report_pdf(request):
-    """Exportar reporte a PDF"""
+    """Exportar reporte completo a PDF"""
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
     from django.http import HttpResponse
     from io import BytesIO
+    from collections import defaultdict
+    from decimal import Decimal
     
     tenant = get_tenant_from_user(request.user)
     start_str = request.GET.get('start_date', timezone.now().date().isoformat())
     end_str = request.GET.get('end_date', timezone.now().date().isoformat())
     
     try:
-        start_date = datetime.strptime(f"{start_str} 00:00:00", '%Y-%m-%d %H:%M:%S')
-        end_date = datetime.strptime(f"{end_str} 23:59:59", '%Y-%m-%d %H:%M:%S')
+        start_date = timezone.make_aware(datetime.strptime(f"{start_str} 00:00:00", '%Y-%m-%d %H:%M:%S'))
+        end_date = timezone.make_aware(datetime.strptime(f"{end_str} 23:59:59", '%Y-%m-%d %H:%M:%S'))
     except ValueError:
         start_date = end_date = timezone.now()
     
@@ -714,79 +925,205 @@ def export_report_pdf(request):
         exit_time__range=(start_date, end_date)
     ).exclude(amount_paid__isnull=True).select_related('category', 'payment_method')
     
-    total_tickets = sum(t.amount_paid or 0 for t in tickets)
+    total_tickets = sum(float(t.amount_paid or 0) for t in tickets)
     
-    from monthly_contracts.models import ContractPayment
+    from monthly_contracts.models import ContractPayment, MonthlyContract
     contract_payments = ContractPayment.objects.filter(
         tenant=tenant,
         payment_date__range=(start_date, end_date),
         is_confirmed=True
-    )
-    total_contracts = sum(p.amount for p in contract_payments)
+    ).select_related('payment_method', 'contract__third_party')
+    total_contracts = sum(float(p.amount or 0) for p in contract_payments)
+    
+    pending_contracts = MonthlyContract.objects.all_tenants().filter(
+        tenant=tenant,
+        is_active=True,
+        end_date__lt=timezone.now().date()
+    ).select_related('third_party').prefetch_related('vehicles__vehicle')
+    total_pending = sum(float(c.monthly_rate or 0) for c in pending_contracts)
     
     # Crear PDF
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
     elements = []
     styles = getSampleStyleSheet()
     
-    # Título
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=1, spaceAfter=20)
-    elements.append(Paragraph(f"REPORTE DE OPERACIONES", title_style))
-    elements.append(Paragraph(f"{tenant.name if tenant else 'SoluPark'}", styles['Heading2']))
-    elements.append(Paragraph(f"Período: {start_str} al {end_str}", styles['Normal']))
-    elements.append(Spacer(1, 20))
+    # Estilos personalizados
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1, spaceAfter=5, textColor=colors.HexColor('#1E293B'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, alignment=1, spaceAfter=20, textColor=colors.HexColor('#64748B'))
+    section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=12, spaceBefore=20, spaceAfter=10, textColor=colors.HexColor('#1E293B'))
     
-    # Resumen
+    # Colores
+    header_bg = colors.HexColor('#1E293B')
+    header_text = colors.white
+    total_bg = colors.HexColor('#F1F5F9')
+    border_color = colors.HexColor('#E2E8F0')
+    green_text = colors.HexColor('#059669')
+    red_text = colors.HexColor('#DC2626')
+    
+    # ========== ENCABEZADO ==========
+    elements.append(Paragraph(f"REPORTE DE OPERACIONES", title_style))
+    elements.append(Paragraph(f"{tenant.name if tenant else 'SoluPark'}", subtitle_style))
+    elements.append(Paragraph(f"Período: {start_str} al {end_str}", subtitle_style))
+    
+    # ========== RESUMEN GENERAL ==========
+    elements.append(Paragraph("RESUMEN GENERAL", section_style))
+    
     summary_data = [
         ['Concepto', 'Cantidad', 'Total'],
-        ['Tickets Parqueadero', str(tickets.count()), f"${total_tickets:,.0f}"],
-        ['Pagos Mensualidades', str(contract_payments.count()), f"${float(total_contracts):,.0f}"],
-        ['TOTAL GENERAL', '', f"${float(total_tickets) + float(total_contracts):,.0f}"],
+        ['Tickets de Parqueadero', str(tickets.count()), f"${total_tickets:,.0f}"],
+        ['Pagos de Mensualidades', str(contract_payments.count()), f"${total_contracts:,.0f}"],
+        ['TOTAL INGRESOS', str(tickets.count() + contract_payments.count()), f"${total_tickets + total_contracts:,.0f}"],
     ]
     
     summary_table = Table(summary_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
     summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E293B')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 0), (-1, 0), header_bg),
+        ('TEXTCOLOR', (0, 0), (-1, 0), header_text),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F1F5F9')),
+        ('BACKGROUND', (0, -1), (-1, -1), total_bg),
         ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+        ('GRID', (0, 0), (-1, -1), 0.5, border_color),
         ('TOPPADDING', (0, 0), (-1, -1), 8),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
     ]))
     elements.append(summary_table)
-    elements.append(Spacer(1, 30))
     
-    # Detalle por método de pago
-    elements.append(Paragraph("Ingresos por Método de Pago", styles['Heading3']))
+    # ========== INGRESOS POR MÉTODO DE PAGO ==========
+    elements.append(Paragraph("INGRESOS POR MÉTODO DE PAGO", section_style))
     
-    from collections import defaultdict
-    payment_summary = defaultdict(float)
+    payment_summary = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
     for t in tickets:
         method = t.payment_method.name if t.payment_method else 'Efectivo'
-        payment_summary[method] += float(t.amount_paid or 0)
+        payment_summary[method]['count'] += 1
+        payment_summary[method]['total'] += t.amount_paid or Decimal('0')
     for p in contract_payments:
         method = p.payment_method.name if p.payment_method else 'Sin especificar'
-        payment_summary[method] += float(p.amount or 0)
+        payment_summary[method]['count'] += 1
+        payment_summary[method]['total'] += p.amount or Decimal('0')
     
-    payment_data = [['Método de Pago', 'Total']]
-    for method, total in sorted(payment_summary.items(), key=lambda x: -x[1]):
-        payment_data.append([method, f"${total:,.0f}"])
+    payment_data = [['Método de Pago', 'Operaciones', 'Total']]
+    for method, data in sorted(payment_summary.items(), key=lambda x: -float(x[1]['total'])):
+        payment_data.append([method, str(data['count']), f"${float(data['total']):,.0f}"])
     
-    payment_table = Table(payment_data, colWidths=[3*inch, 2*inch])
-    payment_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0EA5E9')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(payment_table)
+    if len(payment_data) > 1:
+        payment_table = Table(payment_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+        payment_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0EA5E9')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), header_text),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, border_color),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(payment_table)
+    
+    # ========== CUENTAS POR COBRAR ==========
+    if pending_contracts:
+        elements.append(Paragraph("CUENTAS POR COBRAR (CONTRATOS VENCIDOS)", section_style))
+        
+        pending_data = [['Cliente', 'Vehículos/Combo', 'Vencimiento', 'Tarifa']]
+        for c in pending_contracts:
+            if c.use_combo_rate and c.combo_name:
+                vehicles = f"[COMBO] {c.combo_name}"
+            else:
+                vehicles = c.vehicles_list[:25] + '..' if len(c.vehicles_list or '') > 25 else (c.vehicles_list or '-')
+            pending_data.append([
+                c.third_party.full_name[:20],
+                vehicles,
+                c.end_date.strftime('%d/%m/%Y'),
+                f"${float(c.monthly_rate):,.0f}"
+            ])
+        pending_data.append(['', '', 'TOTAL', f"${total_pending:,.0f}"])
+        
+        pending_table = Table(pending_data, colWidths=[2*inch, 2*inch, 1*inch, 1*inch])
+        pending_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F59E0B')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), header_text),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (-1, -1), (-1, -1), red_text),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, border_color),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(pending_table)
+    
+    # ========== DETALLE DE TICKETS (últimos 30) ==========
+    if tickets:
+        elements.append(PageBreak())
+        elements.append(Paragraph("DETALLE DE TICKETS DE PARQUEADERO", section_style))
+        
+        ticket_data = [['Fecha', 'Placa', 'Categoría', 'Método', 'Monto']]
+        for t in tickets[:30]:
+            ticket_data.append([
+                t.exit_time.strftime('%d/%m %H:%M'),
+                t.placa,
+                t.category.name[:10] if t.category else '-',
+                (t.payment_method.name[:10] if t.payment_method else 'Efectivo'),
+                f"${float(t.amount_paid or 0):,.0f}"
+            ])
+        
+        if tickets.count() > 30:
+            ticket_data.append([f'... y {tickets.count() - 30} más', '', '', '', ''])
+        
+        ticket_data.append(['', '', '', 'TOTAL', f"${total_tickets:,.0f}"])
+        
+        ticket_table = Table(ticket_data, colWidths=[1.2*inch, 1*inch, 1.2*inch, 1.2*inch, 1*inch])
+        ticket_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), header_bg),
+            ('TEXTCOLOR', (0, 0), (-1, 0), header_text),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (-1, -1), (-1, -1), green_text),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, border_color),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(ticket_table)
+    
+    # ========== DETALLE DE MENSUALIDADES ==========
+    if contract_payments:
+        elements.append(Spacer(1, 20))
+        elements.append(Paragraph("PAGOS DE MENSUALIDADES", section_style))
+        
+        contract_data = [['Fecha', 'Cliente', 'Período', 'Monto']]
+        for p in contract_payments:
+            contract_data.append([
+                p.payment_date.strftime('%d/%m %H:%M'),
+                str(p.contract.third_party)[:20] if p.contract else '-',
+                f"{p.get_month_name()} {p.payment_year}",
+                f"${float(p.amount or 0):,.0f}"
+            ])
+        contract_data.append(['', '', 'TOTAL', f"${total_contracts:,.0f}"])
+        
+        contract_table = Table(contract_data, colWidths=[1.2*inch, 2.5*inch, 1.3*inch, 1*inch])
+        contract_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0EA5E9')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), header_text),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (-1, -1), (-1, -1), green_text),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, border_color),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(contract_table)
+    
+    # Pie de página
+    elements.append(Spacer(1, 30))
+    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, alignment=1, textColor=colors.HexColor('#94A3B8'))
+    elements.append(Paragraph(f"Generado el {timezone.now().strftime('%d/%m/%Y %H:%M')} - SoluPark", footer_style))
     
     doc.build(elements)
     
@@ -900,7 +1237,7 @@ def cash_register(request):
             payment_date__gte=start_date,
             payment_date__lt=end_date,
             is_confirmed=True
-        ).select_related('payment_method', 'contract', 'contract__vehicle')
+        ).select_related('payment_method', 'contract', 'contract__third_party')
     else:
         contract_payments = ContractPayment.objects.none()
     
@@ -1027,6 +1364,10 @@ def cash_register(request):
         diferencia = float(caja.dinero_final) - float(caja.dinero_inicial) - total_cash
         diferencia_abs = abs(diferencia)
 
+    # Calcular promedio por ticket
+    avg_ticket = total_income / len(tickets) if tickets else 0
+    total_tickets = total_income
+
     context = {
         'today': today,
         'start_date': start_date.date(),
@@ -1035,9 +1376,11 @@ def cash_register(request):
         'contract_payments': contract_payments,
         'payment_summary': payment_summary_list,
         'total_income': total_income,
+        'total_tickets': total_tickets,
         'total_contracts': total_contracts,
         'total_cash': total_cash,
         'total_all': total_all,
+        'avg_ticket': avg_ticket,
         'caja': caja,
         'dinero_esperado': dinero_esperado,
         'diferencia': diferencia,
@@ -1081,7 +1424,7 @@ def export_cash_register_excel(request):
         payment_date__gte=start_date,
         payment_date__lt=end_date,
         is_confirmed=True
-    ).select_related('payment_method', 'contract', 'contract__vehicle')
+    ).select_related('payment_method', 'contract', 'contract__third_party')
     
     # Crear workbook
     wb = openpyxl.Workbook()
@@ -1138,7 +1481,7 @@ def export_cash_register_excel(request):
     ws[f'A{row}'].font = subheader_font
     
     row += 1
-    headers = ['Vehículo', 'Cliente', 'Método Pago', 'Monto']
+    headers = ['Cliente', 'Vehículos', 'Método Pago', 'Monto']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=row, column=col, value=header)
         cell.font = header_font_white
@@ -1147,8 +1490,8 @@ def export_cash_register_excel(request):
     
     for payment in contract_payments:
         row += 1
-        ws.cell(row=row, column=1, value=payment.contract.vehicle.plate if payment.contract and payment.contract.vehicle else '').border = border
-        ws.cell(row=row, column=2, value=str(payment.contract.third_party) if payment.contract and payment.contract.third_party else '').border = border
+        ws.cell(row=row, column=1, value=str(payment.contract.third_party) if payment.contract and payment.contract.third_party else '').border = border
+        ws.cell(row=row, column=2, value=payment.contract.vehicles_list if payment.contract else '').border = border
         ws.cell(row=row, column=3, value=payment.payment_method.name if payment.payment_method else '').border = border
         ws.cell(row=row, column=4, value=float(payment.amount or 0)).border = border
     
@@ -1206,7 +1549,7 @@ def export_cash_register_pdf(request):
         payment_date__gte=start_date,
         payment_date__lt=end_date,
         is_confirmed=True
-    ).select_related('payment_method', 'contract', 'contract__vehicle')
+    ).select_related('payment_method', 'contract', 'contract__third_party')
     
     # Crear PDF
     buffer = BytesIO()
@@ -1262,12 +1605,12 @@ def export_cash_register_pdf(request):
     # Tabla de mensualidades
     elements.append(Paragraph("Pagos de Mensualidades", styles['Heading3']))
     
-    contract_data = [['Vehículo', 'Cliente', 'Método', 'Monto']]
+    contract_data = [['Cliente', 'Vehículos', 'Método', 'Monto']]
     total_contracts = 0
     for payment in contract_payments:
         contract_data.append([
-            payment.contract.vehicle.plate if payment.contract and payment.contract.vehicle else '',
             str(payment.contract.third_party)[:20] if payment.contract and payment.contract.third_party else '',
+            (payment.contract.vehicles_list[:15] + '..') if payment.contract and len(payment.contract.vehicles_list) > 15 else (payment.contract.vehicles_list if payment.contract else ''),
             payment.payment_method.name if payment.payment_method else '',
             f"${float(payment.amount or 0):,.0f}"
         ])

@@ -1,8 +1,8 @@
 {% extends 'parking/base.html' %}
 
-{% block title %}Contrato {{ contract.vehicle.plate }} - SoluPark{% endblock %}
+{% block title %}Contrato - {{ contract.third_party.full_name }} - SoluPark{% endblock %}
 {% block page_title %}Contrato Mensual{% endblock %}
-{% block page_subtitle %}{{ contract.vehicle.plate }} - {{ contract.third_party.full_name }}{% endblock %}
+{% block page_subtitle %}{{ contract.third_party.full_name }}{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -14,22 +14,30 @@
                     <i class="fas fa-file-contract text-2xl"></i>
                 </div>
                 <div>
-                    <h2 class="text-xl font-bold text-slate-900">{{ contract.vehicle.plate }}</h2>
-                    <p class="text-slate-500">{{ contract.third_party.full_name }}</p>
+                    <h2 class="text-xl font-bold text-slate-900">{{ contract.third_party.full_name }}</h2>
+                    <p class="text-slate-500">{{ contract.vehicles.count }} vehículo(s)</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
-                {% if contract.status == 'active' or contract.status == 'expired' %}
-                <a href="{% url 'contract_renew' contract.pk %}" 
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="{% url 'contract_payment' contract.pk %}" 
                    class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors">
-                    <i class="fas fa-sync-alt"></i>
-                    Renovar
+                    <i class="fas fa-dollar-sign"></i>
+                    Registrar Pago
                 </a>
-                {% endif %}
+                <a href="{% url 'contract_edit' contract.pk %}" 
+                   class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
+                    <i class="fas fa-edit"></i>
+                    Editar
+                </a>
+                <a href="{% url 'contract_delete' contract.pk %}" 
+                   class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-medium transition-colors">
+                    <i class="fas fa-trash"></i>
+                    Eliminar
+                </a>
             </div>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div class="bg-slate-50 rounded-xl p-4">
                 <p class="text-xs text-slate-500 mb-1">Estado</p>
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium
@@ -42,6 +50,9 @@
             <div class="bg-slate-50 rounded-xl p-4">
                 <p class="text-xs text-slate-500 mb-1">Tarifa Mensual</p>
                 <p class="text-xl font-bold text-slate-900">${{ contract.monthly_rate|floatformat:0 }}</p>
+                {% if contract.use_combo_rate %}
+                <span class="text-xs text-amber-600">{{ contract.combo_name|default:"Combo" }}</span>
+                {% endif %}
             </div>
             <div class="bg-slate-50 rounded-xl p-4">
                 <p class="text-xs text-slate-500 mb-1">Inicio</p>
@@ -54,56 +65,124 @@
         </div>
     </div>
     
-    <!-- Info del cliente y vehículo -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
-                <i class="fas fa-user text-primary-500"></i>
-                Cliente
+    <!-- Vehículos del contrato -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-car text-primary-500"></i>
+                Vehículos del Contrato
             </h3>
-            <div class="space-y-3">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
-                        {{ contract.third_party.first_name.0|upper }}{{ contract.third_party.last_name.0|upper }}
+            <a href="{% url 'add_contract_vehicle' contract.pk %}" 
+               class="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-plus"></i>
+                Agregar
+            </a>
+        </div>
+        
+        {% if contract.vehicles.all %}
+        <div class="divide-y divide-slate-100">
+            {% for cv in contract.vehicles.all %}
+            <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-{% if cv.vehicle.vehicle_type == 'motorcycle' %}motorcycle{% elif cv.vehicle.vehicle_type == 'bicycle' %}bicycle{% else %}car{% endif %} text-slate-600 text-lg"></i>
                     </div>
                     <div>
-                        <div class="font-medium text-slate-900">{{ contract.third_party.full_name }}</div>
-                        <div class="text-sm text-slate-500">{{ contract.third_party.document_number }}</div>
+                        <div class="font-bold text-slate-900 text-lg">{{ cv.vehicle.plate }}</div>
+                        <p class="text-sm text-slate-500">{{ cv.vehicle.brand }} {{ cv.vehicle.model }} - {{ cv.category.name }}</p>
                     </div>
                 </div>
-                <div class="text-sm text-slate-600">
-                    <i class="fas fa-phone w-5 text-slate-400"></i>
-                    {{ contract.third_party.phone|default:"-" }}
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <div class="font-bold text-slate-900">${{ cv.monthly_rate|floatformat:0 }}</div>
+                        <span class="text-xs text-slate-500">mensual</span>
+                    </div>
+                    <a href="{% url 'remove_contract_vehicle' contract.pk cv.pk %}" 
+                       class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                       title="Eliminar del contrato">
+                        <i class="fas fa-times"></i>
+                    </a>
                 </div>
-                <div class="text-sm text-slate-600">
-                    <i class="fas fa-envelope w-5 text-slate-400"></i>
-                    {{ contract.third_party.email|default:"-" }}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center">
+            <i class="fas fa-car text-4xl text-slate-300 mb-3"></i>
+            <p class="text-slate-500">No hay vehículos en este contrato</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Info del cliente -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+            <i class="fas fa-user text-primary-500"></i>
+            Cliente
+        </h3>
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                {{ contract.third_party.first_name.0|upper }}{{ contract.third_party.last_name.0|upper }}
+            </div>
+            <div>
+                <div class="font-medium text-slate-900">{{ contract.third_party.full_name }}</div>
+                <div class="text-sm text-slate-500">{{ contract.third_party.document_number }}</div>
+            </div>
+            <div class="ml-auto text-sm text-slate-600">
+                <div><i class="fas fa-phone w-5 text-slate-400"></i> {{ contract.third_party.phone|default:"-" }}</div>
+                <div><i class="fas fa-envelope w-5 text-slate-400"></i> {{ contract.third_party.email|default:"-" }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Control de pagos por mes -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-6 border-b border-slate-200">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-calendar-check text-primary-500"></i>
+                Control de Pagos Mensuales
+            </h3>
+            <p class="text-sm text-slate-500 mt-1">Últimos 12 meses</p>
+        </div>
+        
+        <div class="p-6">
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                {% for month_data in months_history reversed %}
+                <div class="relative">
+                    {% if month_data.paid %}
+                    <div class="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-3 text-center">
+                        <div class="text-xs text-emerald-600 font-medium">{{ month_data.month_name }}</div>
+                        <div class="text-sm font-bold text-emerald-700">{{ month_data.year }}</div>
+                        <div class="mt-2">
+                            <i class="fas fa-check-circle text-emerald-500 text-xl"></i>
+                        </div>
+                        <div class="text-xs text-emerald-600 mt-1">Pagado</div>
+                    </div>
+                    {% else %}
+                    <a href="{% url 'contract_payment' contract.pk %}?month={{ month_data.month }}&year={{ month_data.year }}"
+                       class="block bg-slate-50 border-2 border-slate-200 hover:border-primary-300 hover:bg-primary-50 rounded-xl p-3 text-center transition-colors">
+                        <div class="text-xs text-slate-500 font-medium">{{ month_data.month_name }}</div>
+                        <div class="text-sm font-bold text-slate-700">{{ month_data.year }}</div>
+                        <div class="mt-2">
+                            <i class="fas fa-circle text-slate-300 text-xl"></i>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">Pendiente</div>
+                    </a>
+                    {% endif %}
                 </div>
+                {% endfor %}
             </div>
         </div>
         
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
-                <i class="fas fa-car text-primary-500"></i>
-                Vehículo
-            </h3>
-            <div class="space-y-3">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-car text-slate-600"></i>
-                    </div>
-                    <div>
-                        <div class="font-bold text-slate-900 text-lg">{{ contract.vehicle.plate }}</div>
-                        <div class="text-sm text-slate-500">{{ contract.vehicle.brand }} {{ contract.vehicle.model }}</div>
-                    </div>
+        <div class="px-6 pb-6">
+            <div class="flex items-center gap-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 bg-emerald-100 border-2 border-emerald-200 rounded"></span>
+                    <span class="text-slate-600">Pagado</span>
                 </div>
-                <div class="text-sm text-slate-600">
-                    <i class="fas fa-palette w-5 text-slate-400"></i>
-                    {{ contract.vehicle.color|default:"-" }}
-                </div>
-                <div class="text-sm text-slate-600">
-                    <i class="fas fa-tag w-5 text-slate-400"></i>
-                    {{ contract.category.name }}
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 bg-slate-50 border-2 border-slate-200 rounded"></span>
+                    <span class="text-slate-600">Pendiente (clic para pagar)</span>
                 </div>
             </div>
         </div>
@@ -111,29 +190,34 @@
     
     <!-- Historial de pagos -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div class="p-6 border-b border-slate-200">
+        <div class="p-6 border-b border-slate-200 flex items-center justify-between">
             <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <i class="fas fa-history text-primary-500"></i>
                 Historial de Pagos
             </h3>
+            <span class="text-sm text-slate-500">Total: ${{ total_paid|floatformat:0 }}</span>
         </div>
         
         {% if payments %}
         <div class="divide-y divide-slate-100">
             {% for payment in payments %}
-            <div class="p-4 flex items-center justify-between hover:bg-slate-50">
+            <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50">
                 <div class="flex items-center gap-4">
                     <div class="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
                         <i class="fas fa-check text-emerald-600"></i>
                     </div>
                     <div>
-                        <div class="font-medium text-slate-900">{{ payment.payment_date|date:"d/m/Y H:i" }}</div>
-                        <p class="text-sm text-slate-500">{{ payment.notes|default:"Pago mensual" }}</p>
+                        <div class="font-medium text-slate-900">
+                            {{ payment.get_month_name }} {{ payment.payment_year }}
+                        </div>
+                        <p class="text-sm text-slate-500">{{ payment.payment_date|date:"d/m/Y H:i" }}</p>
                     </div>
                 </div>
                 <div class="text-right">
                     <div class="font-bold text-emerald-600">${{ payment.amount|floatformat:0 }}</div>
-                    <span class="text-xs text-slate-500">{{ payment.get_payment_method_display }}</span>
+                    <span class="text-xs text-slate-500">
+                        {% if payment.payment_method %}{{ payment.payment_method.name }}{% else %}Sin método{% endif %}
+                    </span>
                 </div>
             </div>
             {% endfor %}
@@ -142,6 +226,11 @@
         <div class="p-8 text-center">
             <i class="fas fa-receipt text-4xl text-slate-300 mb-3"></i>
             <p class="text-slate-500">No hay pagos registrados</p>
+            <a href="{% url 'contract_payment' contract.pk %}" 
+               class="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors">
+                <i class="fas fa-dollar-sign"></i>
+                Registrar Primer Pago
+            </a>
         </div>
         {% endif %}
     </div>

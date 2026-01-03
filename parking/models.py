@@ -149,16 +149,7 @@ class ParkingTicket(TenantModel):
             today = timezone.now()
             self.ticket_number = f"{today.strftime('%Y%m%d')}-TEMP"
         
-        # Generar el código de barras con la placa si no existe
-        if not self.barcode:
-            code = barcode.Code128(self.placa, writer=ImageWriter())
-            buffer = BytesIO()
-            code.write(buffer)
-            self.barcode.save(
-                f'barcode_{self.placa}.png',
-                File(buffer),
-                save=False
-            )
+        # Ya no guardamos barcode en disco - usamos get_barcode_base64() en los templates
         
         # Asegurarse de que entry_time tenga un valor
         if not self.entry_time:
@@ -167,6 +158,13 @@ class ParkingTicket(TenantModel):
         # Si es categoría mensual y no tiene fecha de vencimiento
         if self.category.is_monthly and not self.monthly_expiry:
             self.monthly_expiry = self.entry_time + timedelta(days=30)
+        
+        # Si se está registrando salida, borrar imagen de barcode si existe
+        if self.exit_time and self.barcode:
+            try:
+                self.barcode.delete(save=False)
+            except Exception:
+                pass
         
         super().save(*args, **kwargs)
 

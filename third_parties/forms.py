@@ -25,11 +25,13 @@ class ThirdPartyForm(forms.ModelForm):
 class ThirdPartyVehicleForm(forms.ModelForm):
     class Meta:
         model = ThirdPartyVehicle
-        fields = ['plate', 'brand', 'model', 'color', 'vehicle_type', 'is_primary']
+        fields = ['plate', 'brand', 'model', 'color', 'vehicle_type', 'is_primary', 'is_active']
         widgets = {
             'plate': forms.TextInput(attrs={'class': INPUT_CLASS + ' uppercase font-mono', 'placeholder': 'ABC123'}),
             'brand': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: Chevrolet'}),
             'model': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: Spark'}),
             'color': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: Rojo'}),
             'vehicle_type': forms.Select(attrs={'class': SELECT_CLASS}),
+            'is_primary': forms.CheckboxInput(attrs={'class': 'w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500'}),
         }

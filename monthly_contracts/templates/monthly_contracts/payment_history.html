@@ -74,7 +74,7 @@
                             <div class="font-medium text-slate-900">{{ payment.contract.third_party.full_name }}</div>
                         </td>
                         <td class="px-4 py-3">
-                            <span class="font-bold text-slate-900">{{ payment.contract.vehicle.plate }}</span>
+                            <span class="font-mono text-slate-900 text-sm">{{ payment.contract.vehicles_list|default:"-" }}</span>
                         </td>
                         <td class="px-4 py-3">
                             {% if payment.payment_method %}
@@ -88,7 +88,7 @@
                         </td>
                         <td class="px-4 py-3">
                             <span class="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
-                                {{ payment.months_paid }} mes{% if payment.months_paid > 1 %}es{% endif %}
+                                {{ payment.get_month_name }} {{ payment.payment_year }}
                             </span>
                         </td>
                         <td class="px-4 py-3">

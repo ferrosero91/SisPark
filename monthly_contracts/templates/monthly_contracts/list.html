@@ -25,18 +25,22 @@
 
     <!-- Header con filtros y botón crear -->
     <div class="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             <a href="{% url 'contract_list' %}" 
                class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if not status_filter %}bg-primary-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
-                Todos
+                Todos ({{ stats.total }})
             </a>
             <a href="{% url 'contract_list' %}?status=active" 
                class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if status_filter == 'active' %}bg-emerald-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
-                Activos
+                Activos ({{ stats.active }})
             </a>
             <a href="{% url 'contract_list' %}?status=expired" 
                class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if status_filter == 'expired' %}bg-red-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
-                Vencidos
+                Vencidos ({{ stats.expired }})
+            </a>
+            <a href="{% url 'contract_list' %}?status=pending" 
+               class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if status_filter == 'pending' %}bg-amber-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+                Pendientes ({{ stats.pending }})
             </a>
         </div>
         <a href="{% url 'contract_create' %}" 
@@ -54,7 +58,7 @@
                 <thead class="bg-slate-50 border-b border-slate-200">
                     <tr>
                         <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Cliente</th>
-                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vehículo</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vehículos</th>
                         <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vigencia</th>
                         <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Tarifa</th>
                         <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Estado</th>
@@ -76,11 +80,16 @@
                             </div>
                         </td>
                         <td class="px-6 py-4">
-                            <div class="flex items-center gap-2">
-                                <i class="fas fa-car text-slate-400"></i>
-                                <span class="font-bold text-slate-900">{{ contract.vehicle.plate }}</span>
+                            <div class="flex flex-wrap gap-1">
+                                {% for cv in contract.vehicles.all %}
+                                <span class="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs font-medium">
+                                    <i class="fas fa-{% if cv.vehicle.vehicle_type == 'motorcycle' %}motorcycle{% else %}car{% endif %} text-slate-400"></i>
+                                    {{ cv.vehicle.plate }}
+                                </span>
+                                {% empty %}
+                                <span class="text-slate-400 text-sm">Sin vehículos</span>
+                                {% endfor %}
                             </div>
-                            <div class="text-sm text-slate-500">{{ contract.category.name }}</div>
                         </td>
                         <td class="px-6 py-4">
                             <div class="text-slate-900">{{ contract.start_date|date:"d/m/Y" }}</div>
@@ -88,6 +97,9 @@
                         </td>
                         <td class="px-6 py-4">
                             <span class="font-bold text-slate-900">${{ contract.monthly_rate|floatformat:0 }}</span>
+                            {% if contract.use_combo_rate %}
+                            <div class="text-xs text-amber-600">{{ contract.combo_name|default:"Combo" }}</div>
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4">
                             {% if contract.status == 'active' %}
@@ -100,6 +112,11 @@
                                 <span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
                                 Vencido
                             </span>
+                            {% elif contract.status == 'pending' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                                <span class="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                                Pendiente
+                            </span>
                             {% else %}
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium">
                                 <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
@@ -108,17 +125,27 @@
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 text-right">
-                            <div class="flex items-center justify-end gap-2">
+                            <div class="flex items-center justify-end gap-1">
                                 <a href="{% url 'contract_detail' contract.pk %}" 
-                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-primary-600 hover:bg-primary-50 rounded-lg text-sm font-medium transition-colors">
+                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-primary-600 hover:bg-primary-50 rounded-lg text-sm font-medium transition-colors"
+                                   title="Ver detalle">
                                     <i class="fas fa-eye"></i>
                                 </a>
-                                {% if contract.status == 'active' or contract.status == 'expired' %}
-                                <a href="{% url 'contract_renew' contract.pk %}" 
-                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-medium transition-colors">
-                                    <i class="fas fa-sync-alt"></i>
+                                <a href="{% url 'contract_payment' contract.pk %}" 
+                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-medium transition-colors"
+                                   title="Registrar pago">
+                                    <i class="fas fa-dollar-sign"></i>
                                 </a>
-                                {% endif %}
+                                <a href="{% url 'contract_edit' contract.pk %}" 
+                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+                                   title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{% url 'contract_delete' contract.pk %}" 
+                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+                                   title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </a>
                             </div>
                         </td>
                     </tr>

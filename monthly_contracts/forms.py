@@ -1,5 +1,6 @@
 from django import forms
-from .models import MonthlyContract, ContractPayment
+from django.forms import inlineformset_factory
+from .models import MonthlyContract, ContractVehicle, ContractPayment
 from third_parties.models import ThirdParty, ThirdPartyVehicle
 from parking.models import VehicleCategory
 from parking.models_config import PaymentMethod
@@ -9,25 +10,31 @@ SELECT_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2
 
 
 class MonthlyContractForm(forms.ModelForm):
-    register_payment = forms.BooleanField(
-        required=False, 
-        initial=True,
-        label='Registrar pago después de crear',
-        widget=forms.CheckboxInput(attrs={'class': 'w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500'})
-    )
+    """Formulario para crear/editar contratos"""
     
     class Meta:
         model = MonthlyContract
-        fields = ['third_party', 'vehicle', 'category', 'contract_type', 'monthly_rate', 
-                  'start_date', 'end_date', 'auto_renew', 'notes']
+        fields = ['third_party', 'start_date', 'end_date', 'use_combo_rate', 'combo_name', 'combo_rate', 'auto_renew', 'notes']
         widgets = {
             'third_party': forms.Select(attrs={'class': SELECT_CLASS, 'id': 'id_third_party'}),
-            'vehicle': forms.Select(attrs={'class': SELECT_CLASS, 'id': 'id_vehicle'}),
-            'category': forms.Select(attrs={'class': SELECT_CLASS}),
-            'contract_type': forms.Select(attrs={'class': SELECT_CLASS, 'id': 'id_contract_type'}),
-            'monthly_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '1000', 'placeholder': '150000'}),
             'start_date': forms.DateInput(attrs={'class': INPUT_CLASS, 'type': 'date'}),
             'end_date': forms.DateInput(attrs={'class': INPUT_CLASS, 'type': 'date'}),
+            'use_combo_rate': forms.CheckboxInput(attrs={
+                'class': 'w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500',
+                'id': 'id_use_combo_rate',
+                'onchange': 'toggleComboFields()'
+            }),
+            'combo_name': forms.TextInput(attrs={
+                'class': INPUT_CLASS, 
+                'placeholder': 'Ej: Combo Familiar, Plan Empresarial',
+                'id': 'id_combo_name'
+            }),
+            'combo_rate': forms.NumberInput(attrs={
+                'class': INPUT_CLASS, 
+                'step': '1000', 
+                'placeholder': '200000',
+                'id': 'id_combo_rate'
+            }),
             'auto_renew': forms.CheckboxInput(attrs={'class': 'w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500'}),
             'notes': forms.Textarea(attrs={'class': INPUT_CLASS, 'rows': 3, 'placeholder': 'Notas adicionales...'}),
         }
@@ -37,21 +44,74 @@ class MonthlyContractForm(forms.ModelForm):
         self.tenant = tenant
         
         if tenant:
-            self.fields['third_party'].queryset = ThirdParty.objects.all_tenants().filter(tenant=tenant, is_active=True)
+            self.fields['third_party'].queryset = ThirdParty.objects.all_tenants().filter(
+                tenant=tenant, is_active=True
+            )
+        else:
+            self.fields['third_party'].queryset = ThirdParty.objects.none()
+        
+        # Campos de combo son opcionales
+        self.fields['combo_name'].required = False
+        self.fields['combo_rate'].required = False
+
+
+class ContractVehicleForm(forms.ModelForm):
+    """Formulario para agregar vehículos al contrato"""
+    
+    class Meta:
+        model = ContractVehicle
+        fields = ['vehicle', 'category', 'monthly_rate', 'notes']
+        widgets = {
+            'vehicle': forms.Select(attrs={'class': SELECT_CLASS}),
+            'category': forms.Select(attrs={'class': SELECT_CLASS}),
+            'monthly_rate': forms.NumberInput(attrs={
+                'class': INPUT_CLASS, 
+                'step': '1000', 
+                'placeholder': '150000',
+                'min': '0'
+            }),
+            'notes': forms.Textarea(attrs={'class': INPUT_CLASS, 'rows': 2, 'placeholder': 'Notas...'}),
+        }
+    
+    def __init__(self, *args, tenant=None, third_party=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tenant = tenant
+        
+        if third_party:
+            self.fields['vehicle'].queryset = ThirdPartyVehicle.objects.filter(
+                third_party=third_party, is_active=True
+            )
+        elif tenant:
             self.fields['vehicle'].queryset = ThirdPartyVehicle.objects.filter(
                 third_party__tenant=tenant, is_active=True
             )
+        else:
+            self.fields['vehicle'].queryset = ThirdPartyVehicle.objects.none()
+        
+        if tenant:
             self.fields['category'].queryset = VehicleCategory.objects.all_tenants().filter(tenant=tenant)
         else:
-            self.fields['third_party'].queryset = ThirdParty.objects.none()
-            self.fields['vehicle'].queryset = ThirdPartyVehicle.objects.none()
             self.fields['category'].queryset = VehicleCategory.objects.none()
 
 
+# Formset para múltiples vehículos
+ContractVehicleFormSet = inlineformset_factory(
+    MonthlyContract,
+    ContractVehicle,
+    form=ContractVehicleForm,
+    extra=1,
+    can_delete=True,
+    min_num=1,
+    validate_min=True
+)
+
+
 class ContractPaymentForm(forms.ModelForm):
+    """Formulario para registrar pagos"""
+    
     class Meta:
         model = ContractPayment
-        fields = ['amount', 'payment_method', 'months_paid', 'amount_received', 'reference', 'notes']
+        fields = ['amount', 'payment_method', 'payment_month', 'payment_year', 'amount_received', 'reference', 'notes']
         widgets = {
             'amount': forms.NumberInput(attrs={
                 'class': INPUT_CLASS, 
@@ -62,11 +122,17 @@ class ContractPaymentForm(forms.ModelForm):
                 'class': SELECT_CLASS,
                 'id': 'id_payment_method'
             }),
-            'months_paid': forms.NumberInput(attrs={
+            'payment_month': forms.NumberInput(attrs={
                 'class': INPUT_CLASS,
                 'min': '1',
                 'max': '12',
-                'id': 'id_months_paid'
+                'id': 'id_payment_month'
+            }),
+            'payment_year': forms.NumberInput(attrs={
+                'class': INPUT_CLASS,
+                'min': '2020',
+                'max': '2030',
+                'id': 'id_payment_year'
             }),
             'amount_received': forms.NumberInput(attrs={
                 'class': INPUT_CLASS,

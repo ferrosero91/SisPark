@@ -3,7 +3,7 @@
 
 {% block title %}Caja - SoluPark{% endblock %}
 {% block page_title %}Cuadre de Caja{% endblock %}
-{% block page_subtitle %}{{ start_date|date:"d/m/Y" }}{% endblock %}
+{% block page_subtitle %}{{ start_date|date:"d/m/Y" }}{% if start_date != end_date %} - {{ end_date|date:"d/m/Y" }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="space-y-4 lg:space-y-5">
@@ -17,23 +17,71 @@
             <span class="text-slate-400 text-sm">a</span>
             <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}"
                    class="px-2 lg:px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 w-[130px]">
-            <button type="submit" class="px-3 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-700">
-                Filtrar
+            <button type="submit" class="px-3 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-700 inline-flex items-center gap-1">
+                <i class="fas fa-filter"></i> Filtrar
             </button>
         </form>
         
         <div class="flex gap-2">
             <a href="{% url 'cash_register_excel' %}?date={{ start_date|date:'Y-m-d' }}" 
-               class="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">
-                <i class="fas fa-file-excel"></i><span class="hidden sm:inline ml-1">Excel</span>
+               class="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 inline-flex items-center gap-1">
+                <i class="fas fa-file-excel"></i><span class="hidden sm:inline">Excel</span>
             </a>
             <a href="{% url 'cash_register_pdf' %}?date={{ start_date|date:'Y-m-d' }}" 
-               class="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
-                <i class="fas fa-file-pdf"></i><span class="hidden sm:inline ml-1">PDF</span>
+               class="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 inline-flex items-center gap-1">
+                <i class="fas fa-file-pdf"></i><span class="hidden sm:inline">PDF</span>
             </a>
         </div>
     </div>
     {% endif %}
+
+    <!-- Resumen rápido superior -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-parking text-emerald-600"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500">Parqueadero</p>
+                    <p class="text-lg font-bold text-emerald-600">${{ total_tickets|floatformat:0|intcomma }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-sky-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-file-contract text-sky-600"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500">Mensualidades</p>
+                    <p class="text-lg font-bold text-sky-600">${{ total_contracts|floatformat:0|intcomma }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-money-bill-wave text-amber-600"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500">Efectivo</p>
+                    <p class="text-lg font-bold text-amber-600">${{ total_cash|floatformat:0|intcomma }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 text-white">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-dollar-sign text-white"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-400">Total Día</p>
+                    <p class="text-lg font-bold">${{ total_all|floatformat:0|intcomma }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
@@ -42,48 +90,44 @@
             
             <!-- Ingresos por método de pago -->
             <div class="bg-white rounded-xl border border-slate-200">
-                <div class="px-5 py-4 border-b border-slate-100">
-                    <h3 class="font-semibold text-slate-800">Ingresos del Día</h3>
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                        <i class="fas fa-credit-card text-slate-400"></i>
+                        Ingresos por Método de Pago
+                    </h3>
                 </div>
                 <div class="p-5">
                     {% if payment_summary %}
-                    <table class="w-full">
-                        <thead>
-                            <tr class="text-left text-xs text-slate-500 uppercase">
-                                <th class="pb-3">Método de Pago</th>
-                                <th class="pb-3 text-center">Operaciones</th>
-                                <th class="pb-3 text-right">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            {% for item in payment_summary %}
-                            <tr>
-                                <td class="py-3">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-lg flex items-center justify-center {% if item.is_cash %}bg-emerald-100 text-emerald-600{% else %}bg-slate-100 text-slate-500{% endif %}">
-                                            <i class="fas {{ item.icon|default:'fa-credit-card' }} text-sm"></i>
-                                        </div>
-                                        <span class="font-medium text-slate-700">{{ item.name }}</span>
-                                        {% if item.is_cash %}
-                                        <span class="text-xs text-emerald-600">(efectivo)</span>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                                <td class="py-3 text-center text-slate-600">{{ item.count }}</td>
-                                <td class="py-3 text-right font-semibold text-slate-800">${{ item.total|floatformat:0|intcomma }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                        <tfoot class="border-t-2 border-slate-200">
-                            <tr>
-                                <td class="pt-3 font-semibold text-slate-800">Total Ingresos</td>
-                                <td class="pt-3 text-center text-slate-600">{{ tickets|length|add:contract_payments|length }}</td>
-                                <td class="pt-3 text-right text-xl font-bold text-slate-900">${{ total_all|floatformat:0|intcomma }}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                    <div class="space-y-3">
+                        {% for item in payment_summary %}
+                        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg flex items-center justify-center {% if item.is_cash %}bg-emerald-100 text-emerald-600{% else %}bg-slate-200 text-slate-600{% endif %}">
+                                    <i class="fas {{ item.icon|default:'fa-credit-card' }}"></i>
+                                </div>
+                                <div>
+                                    <span class="font-medium text-slate-700">{{ item.name }}</span>
+                                    {% if item.is_cash %}
+                                    <span class="text-xs text-emerald-600 ml-1">(efectivo)</span>
+                                    {% endif %}
+                                    <span class="text-xs text-slate-400 block">{{ item.count }} operación(es)</span>
+                                </div>
+                            </div>
+                            <span class="text-lg font-bold text-slate-800">${{ item.total|floatformat:0|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Total -->
+                    <div class="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
+                        <span class="font-semibold text-slate-700">Total Ingresos</span>
+                        <span class="text-2xl font-bold text-slate-900">${{ total_all|floatformat:0|intcomma }}</span>
+                    </div>
                     {% else %}
-                    <p class="text-center text-slate-400 py-8">No hay ingresos registrados</p>
+                    <div class="text-center py-8">
+                        <i class="fas fa-inbox text-4xl text-slate-300 mb-3"></i>
+                        <p class="text-slate-400">No hay ingresos registrados</p>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -92,66 +136,118 @@
             <div class="bg-white rounded-xl border border-slate-200">
                 <div class="border-b border-slate-100">
                     <nav class="flex">
-                        <button onclick="showTab('tickets')" id="tab-tickets" class="tab-btn flex-1 px-5 py-3 text-sm font-medium border-b-2 border-sky-500 text-sky-600">
-                            Parqueadero ({{ tickets|length }})
+                        <button onclick="showTab('tickets')" id="tab-tickets" class="tab-btn flex-1 px-5 py-3 text-sm font-medium border-b-2 border-sky-500 text-sky-600 flex items-center justify-center gap-2">
+                            <i class="fas fa-ticket-alt"></i>
+                            Parqueadero <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{{ tickets|length }}</span>
                         </button>
-                        <button onclick="showTab('contracts')" id="tab-contracts" class="tab-btn flex-1 px-5 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">
-                            Mensualidades ({{ contract_payments|length }})
+                        <button onclick="showTab('contracts')" id="tab-contracts" class="tab-btn flex-1 px-5 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2">
+                            <i class="fas fa-file-contract"></i>
+                            Mensualidades <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs">{{ contract_payments|length }}</span>
                         </button>
                     </nav>
                 </div>
                 
-                <div id="content-tickets" class="tab-content max-h-80 overflow-y-auto">
+                <!-- Tab Tickets -->
+                <div id="content-tickets" class="tab-content max-h-96 overflow-y-auto">
                     {% if tickets %}
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 sticky top-0">
-                            <tr class="text-left text-xs text-slate-500 uppercase">
-                                <th class="px-4 py-2">Placa</th>
-                                <th class="px-4 py-2">Hora</th>
-                                <th class="px-4 py-2">Método</th>
-                                <th class="px-4 py-2 text-right">Monto</th>
+                            <tr class="text-left text-xs font-semibold text-slate-500 uppercase">
+                                <th class="px-4 py-3">Placa</th>
+                                <th class="px-4 py-3">Categoría</th>
+                                <th class="px-4 py-3">Hora Salida</th>
+                                <th class="px-4 py-3">Método</th>
+                                <th class="px-4 py-3 text-right">Monto</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-50">
+                        <tbody class="divide-y divide-slate-100">
                             {% for ticket in tickets %}
                             <tr class="hover:bg-slate-50">
-                                <td class="px-4 py-2 font-mono text-slate-800">{{ ticket.placa }}</td>
-                                <td class="px-4 py-2 text-slate-600">{{ ticket.exit_time|date:"H:i" }}</td>
-                                <td class="px-4 py-2 text-slate-600">{{ ticket.payment_method.name|default:"Efectivo" }}</td>
-                                <td class="px-4 py-2 text-right font-medium text-slate-800">${{ ticket.amount_paid|floatformat:0|intcomma }}</td>
+                                <td class="px-4 py-3">
+                                    <span class="font-mono font-medium text-slate-800 bg-slate-100 px-2 py-0.5 rounded">{{ ticket.placa }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-slate-600">{{ ticket.category.name|default:"-" }}</td>
+                                <td class="px-4 py-3 text-slate-600">
+                                    <i class="fas fa-clock text-slate-400 mr-1"></i>{{ ticket.exit_time|date:"H:i" }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    <span class="inline-flex items-center gap-1 text-slate-600">
+                                        <i class="fas {{ ticket.payment_method.icon|default:'fa-money-bill' }} text-xs text-slate-400"></i>
+                                        {{ ticket.payment_method.name|default:"Efectivo" }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold text-slate-800">${{ ticket.amount_paid|floatformat:0|intcomma }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
+                        <tfoot class="bg-slate-50 border-t-2 border-slate-200">
+                            <tr>
+                                <td colspan="4" class="px-4 py-3 font-semibold text-slate-700">Total Parqueadero</td>
+                                <td class="px-4 py-3 text-right text-lg font-bold text-emerald-600">${{ total_tickets|floatformat:0|intcomma }}</td>
+                            </tr>
+                        </tfoot>
                     </table>
                     {% else %}
-                    <p class="text-center text-slate-400 py-8">Sin tickets</p>
+                    <div class="text-center py-12">
+                        <i class="fas fa-car text-4xl text-slate-300 mb-3"></i>
+                        <p class="text-slate-400">Sin tickets registrados</p>
+                    </div>
                     {% endif %}
                 </div>
                 
-                <div id="content-contracts" class="tab-content hidden max-h-80 overflow-y-auto">
+                <!-- Tab Mensualidades -->
+                <div id="content-contracts" class="tab-content hidden max-h-96 overflow-y-auto">
                     {% if contract_payments %}
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 sticky top-0">
-                            <tr class="text-left text-xs text-slate-500 uppercase">
-                                <th class="px-4 py-2">Vehículo</th>
-                                <th class="px-4 py-2">Cliente</th>
-                                <th class="px-4 py-2">Método</th>
-                                <th class="px-4 py-2 text-right">Monto</th>
+                            <tr class="text-left text-xs font-semibold text-slate-500 uppercase">
+                                <th class="px-4 py-3">Cliente</th>
+                                <th class="px-4 py-3">Vehículos/Combo</th>
+                                <th class="px-4 py-3">Período</th>
+                                <th class="px-4 py-3">Método</th>
+                                <th class="px-4 py-3 text-right">Monto</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-50">
+                        <tbody class="divide-y divide-slate-100">
                             {% for payment in contract_payments %}
                             <tr class="hover:bg-slate-50">
-                                <td class="px-4 py-2 font-mono text-slate-800">{{ payment.contract.vehicle.plate|default:"-" }}</td>
-                                <td class="px-4 py-2 text-slate-600">{{ payment.contract.third_party|default:"-"|truncatechars:20 }}</td>
-                                <td class="px-4 py-2 text-slate-600">{{ payment.payment_method.name|default:"-" }}</td>
-                                <td class="px-4 py-2 text-right font-medium text-slate-800">${{ payment.amount|floatformat:0|intcomma }}</td>
+                                <td class="px-4 py-3">
+                                    <span class="font-medium text-slate-800">{{ payment.contract.third_party.full_name|default:"-"|truncatechars:20 }}</span>
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if payment.contract.use_combo_rate and payment.contract.combo_name %}
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                        <i class="fas fa-box"></i> {{ payment.contract.combo_name }}
+                                    </span>
+                                    {% else %}
+                                    <span class="font-mono text-slate-600 text-xs">{{ payment.contract.vehicles_list|default:"-"|truncatechars:18 }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-slate-600 text-xs">
+                                    {{ payment.get_month_name }} {{ payment.payment_year }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    <span class="inline-flex items-center gap-1 text-slate-600">
+                                        <i class="fas {{ payment.payment_method.icon|default:'fa-money-bill' }} text-xs text-slate-400"></i>
+                                        {{ payment.payment_method.name|default:"-" }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold text-slate-800">${{ payment.amount|floatformat:0|intcomma }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
+                        <tfoot class="bg-slate-50 border-t-2 border-slate-200">
+                            <tr>
+                                <td colspan="4" class="px-4 py-3 font-semibold text-slate-700">Total Mensualidades</td>
+                                <td class="px-4 py-3 text-right text-lg font-bold text-sky-600">${{ total_contracts|floatformat:0|intcomma }}</td>
+                            </tr>
+                        </tfoot>
                     </table>
                     {% else %}
-                    <p class="text-center text-slate-400 py-8">Sin pagos de mensualidades</p>
+                    <div class="text-center py-12">
+                        <i class="fas fa-file-contract text-4xl text-slate-300 mb-3"></i>
+                        <p class="text-slate-400">Sin pagos de mensualidades</p>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -162,28 +258,38 @@
             
             <!-- Cuadre de caja física -->
             <div class="bg-white rounded-xl border border-slate-200">
-                <div class="px-5 py-4 border-b border-slate-100">
-                    <h3 class="font-semibold text-slate-800">Cuadre de Caja</h3>
+                <div class="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                    <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                        <i class="fas fa-cash-register text-slate-400"></i>
+                        Cuadre de Caja
+                    </h3>
                     <p class="text-xs text-slate-400 mt-1">Solo dinero en efectivo</p>
                 </div>
                 <div class="p-5 space-y-4">
                     
                     <!-- Base -->
-                    <div class="flex items-center justify-between">
-                        <span class="text-slate-600">Base de caja</span>
+                    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-wallet text-slate-400"></i>
+                            <span class="text-slate-600">Base de caja</span>
+                        </div>
                         <span class="font-semibold text-slate-800">${{ caja.dinero_inicial|floatformat:0|intcomma }}</span>
                     </div>
                     
                     <!-- Ingresos efectivo -->
-                    <div class="flex items-center justify-between">
-                        <span class="text-slate-600">+ Ingresos efectivo</span>
+                    <div class="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-plus-circle text-emerald-500"></i>
+                            <span class="text-emerald-700">Ingresos efectivo</span>
+                        </div>
                         <span class="font-semibold text-emerald-600">${{ total_cash|floatformat:0|intcomma }}</span>
                     </div>
                     
+                    <!-- Esperado -->
                     <div class="border-t border-slate-200 pt-4">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-slate-700">Esperado en caja</span>
-                            <span class="text-xl font-bold text-slate-900">${{ dinero_esperado|floatformat:0|intcomma }}</span>
+                        <div class="flex items-center justify-between p-4 bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl text-white">
+                            <span class="font-medium">Esperado en caja</span>
+                            <span class="text-2xl font-bold">${{ dinero_esperado|floatformat:0|intcomma }}</span>
                         </div>
                     </div>
 
@@ -191,11 +297,17 @@
                     <!-- Formulario base -->
                     <form method="post" class="pt-4 border-t border-slate-100">
                         {% csrf_token %}
-                        <label class="block text-sm text-slate-600 mb-2">Establecer base de caja</label>
+                        <label class="block text-sm font-medium text-slate-600 mb-2">
+                            <i class="fas fa-edit text-slate-400 mr-1"></i>
+                            Establecer base de caja
+                        </label>
                         <div class="flex gap-2">
-                            <input type="number" name="dinero_inicial" placeholder="0" min="0" value="{{ caja.dinero_inicial|floatformat:0 }}"
-                                   class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm">
-                            <button type="submit" name="set_dinero_inicial" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200">
+                            <div class="relative flex-1">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                                <input type="number" name="dinero_inicial" placeholder="0" min="0" value="{{ caja.dinero_inicial|floatformat:0 }}"
+                                       class="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500">
+                            </div>
+                            <button type="submit" name="set_dinero_inicial" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200 font-medium">
                                 Guardar
                             </button>
                         </div>
@@ -204,52 +316,91 @@
                     <!-- Formulario cuadre -->
                     <form method="post" class="pt-4 border-t border-slate-100">
                         {% csrf_token %}
-                        <label class="block text-sm text-slate-600 mb-2">Dinero contado en caja</label>
-                        <input type="number" name="dinero_final" required min="0" placeholder="Ingrese el monto contado"
-                               class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm mb-3">
+                        <label class="block text-sm font-medium text-slate-600 mb-2">
+                            <i class="fas fa-calculator text-slate-400 mr-1"></i>
+                            Dinero contado en caja
+                        </label>
+                        <div class="relative mb-3">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                            <input type="number" name="dinero_final" required min="0" placeholder="Ingrese el monto contado"
+                                   class="w-full pl-8 pr-3 py-3 border border-slate-200 rounded-lg text-lg focus:ring-2 focus:ring-sky-500">
+                        </div>
                         <button type="submit" name="realizar_cuadre"
-                                class="w-full px-4 py-2 bg-sky-600 text-white rounded-lg text-sm hover:bg-sky-700">
+                                class="w-full px-4 py-3 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-medium hover:from-sky-500 hover:to-sky-400 shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2">
+                            <i class="fas fa-check-circle"></i>
                             Realizar Cuadre
                         </button>
                     </form>
                     {% else %}
-                    <!-- Resultado -->
-                    <div class="pt-4 border-t border-slate-100">
-                        <div class="flex items-center justify-between mb-3">
-                            <span class="text-slate-600">Dinero contado</span>
+                    <!-- Resultado del cuadre -->
+                    <div class="pt-4 border-t border-slate-100 space-y-3">
+                        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-hand-holding-usd text-slate-400"></i>
+                                <span class="text-slate-600">Dinero contado</span>
+                            </div>
                             <span class="font-semibold text-slate-800">${{ caja.dinero_final|floatformat:0|intcomma }}</span>
                         </div>
                         
-                        <div class="p-3 rounded-lg {% if diferencia == 0 %}bg-emerald-50{% elif diferencia > 0 %}bg-blue-50{% else %}bg-red-50{% endif %}">
+                        <div class="p-4 rounded-xl {% if diferencia == 0 %}bg-emerald-100 border border-emerald-200{% elif diferencia > 0 %}bg-blue-100 border border-blue-200{% else %}bg-red-100 border border-red-200{% endif %}">
                             <div class="flex items-center justify-between">
-                                <span class="text-sm {% if diferencia == 0 %}text-emerald-700{% elif diferencia > 0 %}text-blue-700{% else %}text-red-700{% endif %}">
-                                    {% if diferencia == 0 %}Cuadre exacto{% elif diferencia > 0 %}Sobrante{% else %}Faltante{% endif %}
-                                </span>
-                                <span class="font-bold {% if diferencia == 0 %}text-emerald-700{% elif diferencia > 0 %}text-blue-700{% else %}text-red-700{% endif %}">
+                                <div class="flex items-center gap-2">
+                                    {% if diferencia == 0 %}
+                                    <i class="fas fa-check-circle text-emerald-600 text-xl"></i>
+                                    <span class="font-medium text-emerald-700">Cuadre exacto</span>
+                                    {% elif diferencia > 0 %}
+                                    <i class="fas fa-arrow-up text-blue-600 text-xl"></i>
+                                    <span class="font-medium text-blue-700">Sobrante</span>
+                                    {% else %}
+                                    <i class="fas fa-arrow-down text-red-600 text-xl"></i>
+                                    <span class="font-medium text-red-700">Faltante</span>
+                                    {% endif %}
+                                </div>
+                                <span class="text-2xl font-bold {% if diferencia == 0 %}text-emerald-700{% elif diferencia > 0 %}text-blue-700{% else %}text-red-700{% endif %}">
                                     ${{ diferencia_abs|floatformat:0|intcomma }}
                                 </span>
                             </div>
                         </div>
+                        
+                        <p class="text-xs text-slate-400 text-center">
+                            <i class="fas fa-clock mr-1"></i>
+                            Cuadre realizado el {{ caja.fecha_cuadre|date:"d/m/Y H:i" }}
+                        </p>
                     </div>
                     {% endif %}
                 </div>
             </div>
 
-            <!-- Resumen rápido -->
-            <div class="bg-slate-800 rounded-xl p-5 text-white">
-                <h4 class="text-sm text-slate-400 mb-3">Resumen del día</h4>
-                <div class="space-y-2">
-                    <div class="flex justify-between">
-                        <span class="text-slate-300">Tickets</span>
-                        <span class="font-medium">{{ tickets|length }}</span>
+            <!-- Estadísticas del día -->
+            <div class="bg-white rounded-xl border border-slate-200 p-5">
+                <h4 class="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <i class="fas fa-chart-pie text-slate-400"></i>
+                    Estadísticas
+                </h4>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-600 text-sm">Tickets procesados</span>
+                        <span class="font-bold text-slate-800">{{ tickets|length }}</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-300">Mensualidades</span>
-                        <span class="font-medium">{{ contract_payments|length }}</span>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-600 text-sm">Pagos mensualidades</span>
+                        <span class="font-bold text-slate-800">{{ contract_payments|length }}</span>
                     </div>
-                    <div class="flex justify-between pt-2 border-t border-slate-700">
-                        <span class="text-slate-300">Total ventas</span>
-                        <span class="font-bold text-lg">${{ total_all|floatformat:0|intcomma }}</span>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-600 text-sm">Total operaciones</span>
+                        <span class="font-bold text-slate-800">{{ tickets|length|add:contract_payments|length }}</span>
+                    </div>
+                    <div class="pt-3 border-t border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-600 text-sm">Promedio por ticket</span>
+                            <span class="font-bold text-emerald-600">
+                                {% if tickets %}
+                                ${{ avg_ticket|floatformat:0|intcomma }}
+                                {% else %}
+                                $0
+                                {% endif %}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -259,8 +410,10 @@
 
 <script>
 function showTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(el => {
+    document.querySelectorAll('.tab-content').forEach(function(el) {
+        el.classList.add('hidden');
+    });
+    document.querySelectorAll('.tab-btn').forEach(function(el) {
         el.classList.remove('border-sky-500', 'text-sky-600');
         el.classList.add('border-transparent', 'text-slate-500');
     });

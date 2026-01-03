@@ -1,0 +1,54 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Eliminar Contrato - SoluPark{% endblock %}
+{% block page_title %}Eliminar Contrato{% endblock %}
+{% block page_subtitle %}{{ contract.third_party.full_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-3xl text-red-600"></i>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2">¿Eliminar contrato?</h3>
+            <p class="text-slate-600 mb-4">
+                Estás a punto de eliminar el contrato de <strong>{{ contract.third_party.full_name }}</strong>.
+            </p>
+            <div class="bg-slate-50 rounded-xl p-4 mb-4 text-left">
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div class="text-slate-500">Cliente:</div>
+                    <div class="font-medium">{{ contract.third_party.full_name }}</div>
+                    <div class="text-slate-500">Vehículos:</div>
+                    <div class="font-medium">{{ contract.vehicles_list|default:"Sin vehículos" }}</div>
+                    <div class="text-slate-500">Tarifa:</div>
+                    <div class="font-medium">${{ contract.monthly_rate|floatformat:0 }}</div>
+                    <div class="text-slate-500">Vigencia:</div>
+                    <div class="font-medium">{{ contract.start_date|date:"d/m/Y" }} - {{ contract.end_date|date:"d/m/Y" }}</div>
+                    <div class="text-slate-500">Estado:</div>
+                    <div class="font-medium">{{ contract.get_status_display }}</div>
+                </div>
+            </div>
+            <p class="text-sm text-red-600">
+                <i class="fas fa-warning mr-1"></i>
+                Se eliminarán también todos los pagos asociados a este contrato.
+            </p>
+        </div>
+        
+        <div class="p-6 bg-slate-50 border-t border-slate-200">
+            <form method="post" class="flex gap-3">
+                {% csrf_token %}
+                <a href="{% url 'contract_detail' contract.pk %}" 
+                   class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-3 px-4 rounded-xl transition-colors text-center">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-xl transition-colors">
+                    <i class="fas fa-trash mr-2"></i>
+                    Eliminar
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

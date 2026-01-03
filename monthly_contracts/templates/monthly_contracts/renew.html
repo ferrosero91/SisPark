@@ -2,7 +2,7 @@
 
 {% block title %}Renovar Contrato - SoluPark{% endblock %}
 {% block page_title %}Renovar Contrato{% endblock %}
-{% block page_subtitle %}{{ contract.vehicle.plate }} - {{ contract.third_party.full_name }}{% endblock %}
+{% block page_subtitle %}{{ contract.vehicles_list }} - {{ contract.third_party.full_name }}{% endblock %}
 
 {% block content %}
 <div class="max-w-xl">
@@ -12,7 +12,7 @@
                 <i class="fas fa-sync-alt text-xl"></i>
             </div>
             <div>
-                <h2 class="text-lg font-bold text-slate-900">{{ contract.vehicle.plate }}</h2>
+                <h2 class="text-lg font-bold text-slate-900">{{ contract.vehicles_list|default:"Sin vehículos" }}</h2>
                 <p class="text-slate-500">{{ contract.third_party.full_name }}</p>
             </div>
         </div>

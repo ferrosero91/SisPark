@@ -100,18 +100,24 @@ class ContractDetectionService:
     
     def _find_active_contract(self, vehicle) -> Optional[Any]:
         """Busca un contrato activo para el vehículo"""
-        from monthly_contracts.models import MonthlyContract
+        from monthly_contracts.models import MonthlyContract, ContractVehicle
         
         today = timezone.now().date()
         
-        return MonthlyContract.objects.all_tenants().filter(
-            tenant=self.tenant,
+        # Buscar si el vehículo está en algún contrato activo
+        contract_vehicle = ContractVehicle.objects.filter(
             vehicle=vehicle,
             is_active=True,
-            status__in=['active', 'pending'],
-            start_date__lte=today,
-            end_date__gte=today
-        ).select_related('category').first()
+            contract__tenant=self.tenant,
+            contract__is_active=True,
+            contract__status__in=['active', 'pending'],
+            contract__start_date__lte=today,
+            contract__end_date__gte=today
+        ).select_related('contract', 'category').first()
+        
+        if contract_vehicle:
+            return contract_vehicle.contract
+        return None
     
     def _find_special_rate(self, third_party, category) -> Optional[RateResult]:
         """Busca tarifas especiales para el tercero"""
@@ -205,7 +211,7 @@ class ContractDetectionService:
             status='active',
             end_date__gte=today,
             end_date__lte=threshold
-        ).select_related('third_party', 'vehicle', 'category').order_by('end_date'))
+        ).select_related('third_party').prefetch_related('vehicles__vehicle').order_by('end_date'))
     
     def get_expired_contracts(self) -> list:
         """Obtiene contratos vencidos que necesitan renovación"""
@@ -217,7 +223,7 @@ class ContractDetectionService:
             tenant=self.tenant,
             is_active=True,
             end_date__lt=today
-        ).select_related('third_party', 'vehicle', 'category').order_by('end_date'))
+        ).select_related('third_party').prefetch_related('vehicles__vehicle').order_by('end_date'))
     
     def process_auto_renewals(self) -> Dict[str, Any]:
         """
@@ -240,7 +246,7 @@ class ContractDetectionService:
             tenant=self.tenant,
             is_active=True,
             end_date__lte=today
-        ).select_related('third_party', 'vehicle')
+        ).select_related('third_party').prefetch_related('vehicles__vehicle')
         
         for contract in contracts:
             # Verificar si tiene auto-renovación habilitada
@@ -349,8 +355,12 @@ def get_contract_summary(tenant) -> Dict[str, Any]:
         is_active=True
     )
     
+    # Calcular ingresos mensuales sumando las tarifas de cada contrato
+    active_contracts = contracts.filter(status='active')
+    monthly_revenue = sum(c.monthly_rate for c in active_contracts)
+    
     return {
-        'total_active': contracts.filter(status='active').count(),
+        'total_active': active_contracts.count(),
         'total_pending': contracts.filter(status='pending').count(),
         'total_expired': contracts.filter(end_date__lt=today).count(),
         'expiring_soon': contracts.filter(
@@ -358,7 +368,5 @@ def get_contract_summary(tenant) -> Dict[str, Any]:
             end_date__gte=today,
             end_date__lte=today + timedelta(days=5)
         ).count(),
-        'monthly_revenue': contracts.filter(
-            status='active'
-        ).aggregate(total=Sum('monthly_rate'))['total'] or Decimal('0')
+        'monthly_revenue': monthly_revenue
     }

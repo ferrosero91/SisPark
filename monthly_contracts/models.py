@@ -11,7 +11,8 @@ import uuid
 
 class MonthlyContract(TenantModel):
     """
-    Contrato de mensualidad para un vehículo.
+    Contrato de mensualidad para un cliente.
+    Puede incluir múltiples vehículos con sus respectivas tarifas.
     """
     
     class Status(models.TextChoices):
@@ -26,24 +27,12 @@ class MonthlyContract(TenantModel):
         editable=False
     )
     
-    # Relaciones
+    # Cliente del contrato
     third_party = models.ForeignKey(
         'third_parties.ThirdParty',
         on_delete=models.CASCADE,
         related_name='contracts',
-        verbose_name="Tercero"
-    )
-    vehicle = models.ForeignKey(
-        'third_parties.ThirdPartyVehicle',
-        on_delete=models.CASCADE,
-        related_name='contracts',
-        verbose_name="Vehículo"
-    )
-    category = models.ForeignKey(
-        'parking.VehicleCategory',
-        on_delete=models.PROTECT,
-        related_name='monthly_contracts',
-        verbose_name="Categoría"
+        verbose_name="Cliente"
     )
     
     # Período del contrato
@@ -52,13 +41,6 @@ class MonthlyContract(TenantModel):
     )
     end_date = models.DateField(
         verbose_name="Fecha de fin"
-    )
-    
-    # Tarifa
-    monthly_rate = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        verbose_name="Tarifa mensual"
     )
     
     # Estado
@@ -79,17 +61,25 @@ class MonthlyContract(TenantModel):
         verbose_name="Renovación automática"
     )
     
-    # Tipo de contrato
-    contract_type = models.CharField(
-        max_length=20,
-        choices=[
-            ('monthly', 'Mensual'),
-            ('biweekly', 'Quincenal'),
-            ('weekly', 'Semanal'),
-            ('daily', 'Diario'),
-        ],
-        default='monthly',
-        verbose_name="Tipo de contrato"
+    # Tarifa tipo combo (tarifa única para todos los vehículos)
+    use_combo_rate = models.BooleanField(
+        default=False,
+        verbose_name="Usar tarifa combo",
+        help_text="Si está activo, se usa una tarifa única en lugar de sumar las tarifas individuales"
+    )
+    combo_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Tarifa combo",
+        help_text="Tarifa única mensual para todos los vehículos del contrato"
+    )
+    combo_name = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Nombre del combo",
+        help_text="Ej: 'Combo Familiar', 'Plan Empresarial'"
     )
     
     # Notas
@@ -122,7 +112,21 @@ class MonthlyContract(TenantModel):
         ordering = ['-start_date']
     
     def __str__(self):
-        return f"{self.vehicle.plate} - {self.start_date} a {self.end_date}"
+        return f"Contrato {self.third_party.full_name} - {self.start_date}"
+    
+    @property
+    def monthly_rate(self):
+        """Tarifa mensual total (combo o suma de vehículos)"""
+        if self.use_combo_rate and self.combo_rate:
+            return self.combo_rate
+        return self.vehicles.filter(is_active=True).aggregate(
+            total=models.Sum('monthly_rate')
+        )['total'] or Decimal('0')
+    
+    @property
+    def vehicles_list(self):
+        """Lista de placas de vehículos"""
+        return ", ".join([v.vehicle.plate for v in self.vehicles.all()])
     
     def calculate_status(self):
         """Calcula el estado actual del contrato basado en fechas y pagos."""
@@ -168,35 +172,11 @@ class MonthlyContract(TenantModel):
         """Verifica si el contrato está por vencer"""
         return 0 < self.days_until_expiry() <= days
     
-    def get_balance(self):
-        """Calcula el saldo pendiente del contrato"""
-        total_paid = self.payments.filter(is_confirmed=True).aggregate(
-            total=models.Sum('amount')
-        )['total'] or Decimal('0')
-        return self.monthly_rate - total_paid
-    
     def get_total_paid(self):
         """Total pagado en este contrato"""
         return self.payments.filter(is_confirmed=True).aggregate(
             total=models.Sum('amount')
         )['total'] or Decimal('0')
-    
-    def renew(self, months=1):
-        """Renueva el contrato por un número de meses."""
-        today = timezone.now().date()
-        
-        # Si el contrato ya venció, empezar desde hoy
-        if self.end_date < today:
-            self.start_date = today
-            new_end_date = today + timedelta(days=30 * months)
-        else:
-            new_end_date = self.end_date + timedelta(days=30 * months)
-        
-        self.end_date = new_end_date
-        self.status = self.Status.ACTIVE
-        self.save()
-        
-        return self
     
     @classmethod
     def get_expiring_contracts(cls, tenant, days=5):
@@ -215,17 +195,85 @@ class MonthlyContract(TenantModel):
     @classmethod
     def get_pending_payments(cls, tenant):
         """Obtiene contratos con pagos pendientes o vencidos."""
-        today = timezone.now().date()
         return cls.objects.all_tenants().filter(
             tenant=tenant,
             is_active=True,
             status__in=[cls.Status.PENDING, cls.Status.EXPIRED]
-        ).select_related('third_party', 'vehicle', 'category')
+        ).select_related('third_party')
+
+
+class ContractVehicle(models.Model):
+    """
+    Vehículo asociado a un contrato con su tarifa individual.
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    
+    contract = models.ForeignKey(
+        MonthlyContract,
+        on_delete=models.CASCADE,
+        related_name='vehicles',
+        verbose_name="Contrato"
+    )
+    
+    vehicle = models.ForeignKey(
+        'third_parties.ThirdPartyVehicle',
+        on_delete=models.CASCADE,
+        related_name='contract_vehicles',
+        verbose_name="Vehículo"
+    )
+    
+    category = models.ForeignKey(
+        'parking.VehicleCategory',
+        on_delete=models.PROTECT,
+        related_name='contract_vehicles',
+        verbose_name="Categoría"
+    )
+    
+    monthly_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Tarifa mensual"
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        verbose_name="Notas"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de registro"
+    )
+    
+    class Meta:
+        verbose_name = "Vehículo del Contrato"
+        verbose_name_plural = "Vehículos del Contrato"
+        ordering = ['created_at']
+        # Un vehículo solo puede estar en un contrato activo a la vez
+        constraints = [
+            models.UniqueConstraint(
+                fields=['contract', 'vehicle'],
+                name='unique_vehicle_per_contract'
+            )
+        ]
+    
+    def __str__(self):
+        return f"{self.vehicle.plate} - ${self.monthly_rate}"
 
 
 class ContractPayment(models.Model):
     """
     Registro de pagos de contratos mensuales.
+    Cada pago corresponde a un mes específico.
     """
     
     id = models.UUIDField(
@@ -250,7 +298,7 @@ class ContractPayment(models.Model):
         verbose_name="Parqueadero"
     )
     
-    # Método de pago (referencia al PaymentMethod configurado)
+    # Método de pago
     payment_method = models.ForeignKey(
         'parking.PaymentMethod',
         on_delete=models.SET_NULL,
@@ -287,17 +335,23 @@ class ContractPayment(models.Model):
         verbose_name="Cambio"
     )
     
-    # Referencia de pago (para transferencias, etc.)
+    # Referencia de pago
     reference = models.CharField(
         max_length=100,
         blank=True,
         verbose_name="Referencia"
     )
     
-    # Meses pagados
-    months_paid = models.PositiveIntegerField(
-        default=1,
-        verbose_name="Meses pagados"
+    # Mes y año que cubre el pago
+    payment_month = models.PositiveIntegerField(
+        verbose_name="Mes",
+        help_text="Mes que cubre este pago (1-12)",
+        default=1
+    )
+    payment_year = models.PositiveIntegerField(
+        verbose_name="Año",
+        help_text="Año que cubre este pago",
+        default=2026
     )
     
     # Período que cubre el pago
@@ -341,10 +395,22 @@ class ContractPayment(models.Model):
     class Meta:
         verbose_name = "Pago de Contrato"
         verbose_name_plural = "Pagos de Contratos"
-        ordering = ['-payment_date']
+        ordering = ['-payment_year', '-payment_month', '-payment_date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['contract', 'payment_month', 'payment_year'],
+                name='unique_payment_per_month'
+            )
+        ]
     
     def __str__(self):
-        return f"Pago ${self.amount} - {self.contract.vehicle.plate}"
+        return f"Pago ${self.amount} - {self.contract.third_party.full_name} ({self.get_month_name()} {self.payment_year})"
+    
+    def get_month_name(self):
+        """Retorna el nombre del mes"""
+        months = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        return months[self.payment_month] if 1 <= self.payment_month <= 12 else ''
     
     def save(self, *args, **kwargs):
         if not self.tenant_id and self.contract_id:
@@ -354,155 +420,19 @@ class ContractPayment(models.Model):
         if self.amount_received and self.amount:
             self.change_amount = self.amount_received - self.amount
         
+        # Calcular período si no está definido
+        if not self.period_start:
+            import calendar
+            self.period_start = timezone.datetime(self.payment_year, self.payment_month, 1).date()
+            last_day = calendar.monthrange(self.payment_year, self.payment_month)[1]
+            self.period_end = timezone.datetime(self.payment_year, self.payment_month, last_day).date()
+        
         super().save(*args, **kwargs)
         
-        # Actualizar estado del contrato después de guardar el pago
+        # Actualizar estado y fecha fin del contrato
         if self.is_confirmed:
             self.contract.update_status()
-
-
-class SpecialRate(TenantModel):
-    """
-    Tarifas especiales para terceros o grupos.
-    Permite configurar descuentos, tarifas planas, etc.
-    """
-    
-    class RateType(models.TextChoices):
-        DISCOUNT = 'discount', 'Descuento porcentual'
-        FLAT = 'flat', 'Tarifa plana'
-        COURTESY = 'courtesy', 'Cortesía'
-        DAILY_MAX = 'daily_max', 'Máximo diario'
-    
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False
-    )
-    
-    name = models.CharField(
-        max_length=100,
-        verbose_name="Nombre de la tarifa"
-    )
-    
-    # Puede aplicar a un tercero específico o a una categoría
-    third_party = models.ForeignKey(
-        'third_parties.ThirdParty',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='special_rates',
-        verbose_name="Tercero"
-    )
-    
-    category = models.ForeignKey(
-        'parking.VehicleCategory',
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='special_rates',
-        verbose_name="Categoría"
-    )
-    
-    rate_type = models.CharField(
-        max_length=20,
-        choices=RateType.choices,
-        default=RateType.DISCOUNT,
-        verbose_name="Tipo de tarifa"
-    )
-    
-    # Valor según el tipo
-    discount_percent = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="Porcentaje de descuento"
-    )
-    
-    flat_rate = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="Tarifa plana"
-    )
-    
-    daily_max = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="Máximo diario"
-    )
-    
-    # Vigencia
-    start_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Fecha inicio"
-    )
-    end_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Fecha fin"
-    )
-    
-    is_active = models.BooleanField(
-        default=True,
-        verbose_name="Activa"
-    )
-    
-    notes = models.TextField(
-        blank=True,
-        verbose_name="Notas"
-    )
-    
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Fecha de creación"
-    )
-    
-    class Meta:
-        verbose_name = "Tarifa Especial"
-        verbose_name_plural = "Tarifas Especiales"
-        ordering = ['-created_at']
-    
-    def __str__(self):
-        if self.third_party:
-            return f"{self.name} - {self.third_party}"
-        return self.name
-    
-    def is_valid(self, check_date=None):
-        """Verifica si la tarifa está vigente"""
-        if not self.is_active:
-            return False
-        
-        if check_date is None:
-            check_date = timezone.now().date()
-        
-        if self.start_date and check_date < self.start_date:
-            return False
-        
-        if self.end_date and check_date > self.end_date:
-            return False
-        
-        return True
-    
-    def calculate_amount(self, original_amount):
-        """Calcula el monto final según el tipo de tarifa"""
-        original = Decimal(str(original_amount))
-        
-        if self.rate_type == self.RateType.COURTESY:
-            return Decimal('0')
-        
-        if self.rate_type == self.RateType.FLAT and self.flat_rate:
-            return self.flat_rate
-        
-        if self.rate_type == self.RateType.DISCOUNT and self.discount_percent:
-            discount = original * (self.discount_percent / 100)
-            return original - discount
-        
-        if self.rate_type == self.RateType.DAILY_MAX and self.daily_max:
-            return min(original, self.daily_max)
-        
-        return original
+            if self.period_end and (not self.contract.end_date or self.period_end > self.contract.end_date):
+                self.contract.end_date = self.period_end
+                self.contract.status = MonthlyContract.Status.ACTIVE
+                self.contract.save(update_fields=['end_date', 'status'])

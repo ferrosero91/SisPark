@@ -5,97 +5,325 @@
 {% block page_subtitle %}Crear nuevo contrato mensual{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl">
-    <form method="post" class="space-y-6">
-        {% csrf_token %}
+<form method="post" id="contractForm" class="space-y-6">
+    {% csrf_token %}
+    
+    <!-- Cliente -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+            <i class="fas fa-user text-primary-500"></i>
+            Cliente
+        </h3>
         
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
-            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <i class="fas fa-user text-primary-500"></i>
-                Cliente y Vehículo
-            </h3>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
-                {{ form.third_party }}
-                {% if form.third_party.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.third_party.errors.0 }}</p>
-                {% endif %}
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Vehículo</label>
-                {{ form.vehicle }}
-                {% if form.vehicle.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.vehicle.errors.0 }}</p>
-                {% endif %}
-                <p class="mt-1 text-xs text-slate-500">Seleccione primero un cliente para ver sus vehículos</p>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
-                {{ form.category }}
-                {% if form.category.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.category.errors.0 }}</p>
-                {% endif %}
-            </div>
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Seleccionar Cliente *</label>
+            {{ form.third_party }}
+            <p class="text-xs text-slate-500 mt-1">Seleccione el cliente para ver sus vehículos disponibles</p>
         </div>
-        
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+    </div>
+    
+    <!-- Vehículos -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <i class="fas fa-calendar text-primary-500"></i>
-                Vigencia y Tarifa
+                <i class="fas fa-car text-primary-500"></i>
+                Vehículos del Contrato
             </h3>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Tarifa Mensual</label>
-                {{ form.monthly_rate }}
-                {% if form.monthly_rate.errors %}
-                <p class="mt-1 text-sm text-red-600">{{ form.monthly_rate.errors.0 }}</p>
-                {% endif %}
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de Inicio</label>
-                    {{ form.start_date }}
-                    {% if form.start_date.errors %}
-                    <p class="mt-1 text-sm text-red-600">{{ form.start_date.errors.0 }}</p>
-                    {% endif %}
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de Vencimiento</label>
-                    {{ form.end_date }}
-                    {% if form.end_date.errors %}
-                    <p class="mt-1 text-sm text-red-600">{{ form.end_date.errors.0 }}</p>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Notas</label>
-                {{ form.notes }}
-            </div>
-            
-            <div class="flex items-center gap-2 p-4 bg-emerald-50 rounded-xl">
-                {{ form.initial_payment }}
-                <label for="id_initial_payment" class="text-sm text-emerald-800">
-                    Registrar pago inicial al crear el contrato
-                </label>
-            </div>
-        </div>
-        
-        <div class="flex items-center gap-4">
-            <button type="submit" 
-                    class="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-primary-500/30">
-                <i class="fas fa-save"></i>
-                Crear Contrato
+            <button type="button" onclick="addVehicleRow()" 
+                    class="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-plus"></i>
+                Agregar Vehículo
             </button>
-            <a href="{% url 'contract_list' %}" 
-               class="inline-flex items-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
-                Cancelar
-            </a>
         </div>
-    </form>
-</div>
+        
+        <div id="vehiclesContainer" class="space-y-3">
+            {% if contract %}
+                {% for cv in contract.vehicles.all %}
+                <div class="vehicle-row grid grid-cols-1 sm:grid-cols-12 gap-3 p-4 bg-slate-50 rounded-xl">
+                    <div class="sm:col-span-4">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Vehículo</label>
+                        <select name="vehicle_id" class="vehicle-select w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <option value="">Seleccionar...</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Categoría</label>
+                        <select name="vehicle_category" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if cv.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Tarifa Mensual</label>
+                        <input type="number" name="vehicle_rate" value="{{ cv.monthly_rate|floatformat:0 }}" 
+                               class="vehicle-rate w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" 
+                               placeholder="150000" step="1000" min="0" oninput="calculateTotal()">
+                    </div>
+                    <div class="sm:col-span-2 flex items-end">
+                        <button type="button" onclick="removeVehicleRow(this)" 
+                                class="w-full px-3 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-sm transition-colors">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div class="vehicle-row grid grid-cols-1 sm:grid-cols-12 gap-3 p-4 bg-slate-50 rounded-xl">
+                <div class="sm:col-span-4">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Vehículo</label>
+                    <select name="vehicle_id" class="vehicle-select w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                        <option value="">Primero seleccione un cliente</option>
+                    </select>
+                </div>
+                <div class="sm:col-span-3">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Categoría</label>
+                    <select name="vehicle_category" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="sm:col-span-3">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Tarifa Mensual</label>
+                    <input type="number" name="vehicle_rate" 
+                           class="vehicle-rate w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" 
+                           placeholder="150000" step="1000" min="0" oninput="calculateTotal()">
+                </div>
+                <div class="sm:col-span-2 flex items-end">
+                    <button type="button" onclick="removeVehicleRow(this)" 
+                            class="w-full px-3 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-sm transition-colors">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <p id="noVehiclesMsg" class="text-center text-slate-500 py-4 hidden">
+            <i class="fas fa-info-circle mr-2"></i>
+            Agregue al menos un vehículo al contrato
+        </p>
+    </div>
+
+    <!-- Tarifa Combo -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+            <i class="fas fa-tags text-primary-500"></i>
+            Tarifa
+        </h3>
+        
+        <div class="flex items-center gap-3 mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            {{ form.use_combo_rate }}
+            <label for="id_use_combo_rate" class="text-sm text-amber-800">
+                <strong>Usar tarifa combo</strong> - Establecer una tarifa única para todos los vehículos
+            </label>
+        </div>
+        
+        <div id="comboFields" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4" style="display: none;">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Nombre del Combo</label>
+                {{ form.combo_name }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Tarifa Combo</label>
+                {{ form.combo_rate }}
+            </div>
+        </div>
+        
+        <div id="totalSection" class="p-4 bg-slate-100 rounded-xl">
+            <div class="flex items-center justify-between">
+                <span class="text-slate-600 font-medium">Tarifa Mensual Total:</span>
+                <span id="totalRate" class="text-2xl font-bold text-primary-600">$0</span>
+            </div>
+            <p id="totalDescription" class="text-xs text-slate-500 mt-1">Suma de tarifas individuales</p>
+        </div>
+    </div>
+    
+    <!-- Vigencia -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+            <i class="fas fa-calendar text-primary-500"></i>
+            Vigencia
+        </h3>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de Inicio *</label>
+                {{ form.start_date }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de Vencimiento *</label>
+                {{ form.end_date }}
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            {{ form.auto_renew }}
+            <label for="id_auto_renew" class="text-sm text-slate-700">Renovación automática</label>
+        </div>
+    </div>
+    
+    <!-- Notas -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+            <i class="fas fa-sticky-note text-primary-500"></i>
+            Notas
+        </h3>
+        {{ form.notes }}
+    </div>
+    
+    <!-- Botones -->
+    <div class="flex flex-col sm:flex-row gap-4">
+        <button type="submit" 
+                class="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-primary-500/30">
+            <i class="fas fa-save"></i>
+            {% if contract %}Actualizar{% else %}Crear{% endif %} Contrato
+        </button>
+        <a href="{% url 'contract_list' %}" 
+           class="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
+            Cancelar
+        </a>
+    </div>
+</form>
+
+<script>
+var clientVehicles = [];
+var categoriesData = [];
+
+// Inicializar categorías desde Django
+{% for cat in categories %}
+categoriesData.push({id: '{{ cat.id }}', name: '{{ cat.name }}'});
+{% endfor %}
+
+// Cargar vehículos cuando cambia el cliente
+document.getElementById('id_third_party').addEventListener('change', function() {
+    var clientId = this.value;
+    if (!clientId) {
+        clientVehicles = [];
+        updateVehicleSelects();
+        return;
+    }
+    
+    fetch('{% url "get_client_vehicles" %}?third_party_id=' + clientId)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            clientVehicles = data.vehicles;
+            updateVehicleSelects();
+        });
+});
+
+function updateVehicleSelects() {
+    var selects = document.querySelectorAll('.vehicle-select');
+    selects.forEach(function(select) {
+        var currentValue = select.value;
+        select.innerHTML = '<option value="">Seleccionar vehículo...</option>';
+        clientVehicles.forEach(function(v) {
+            var option = document.createElement('option');
+            option.value = v.id;
+            option.textContent = v.plate + ' - ' + (v.brand || '') + ' ' + (v.model || '');
+            if (v.id == currentValue) option.selected = true;
+            select.appendChild(option);
+        });
+    });
+}
+
+function buildCategoryOptions() {
+    var html = '';
+    for (var i = 0; i < categoriesData.length; i++) {
+        html += '<option value="' + categoriesData[i].id + '">' + categoriesData[i].name + '</option>';
+    }
+    return html;
+}
+
+function addVehicleRow() {
+    var container = document.getElementById('vehiclesContainer');
+    var row = document.createElement('div');
+    row.className = 'vehicle-row grid grid-cols-1 sm:grid-cols-12 gap-3 p-4 bg-slate-50 rounded-xl';
+    row.innerHTML = '<div class="sm:col-span-4">' +
+        '<label class="block text-xs font-medium text-slate-500 mb-1">Vehículo</label>' +
+        '<select name="vehicle_id" class="vehicle-select w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">' +
+        '<option value="">Seleccionar vehículo...</option>' +
+        '</select>' +
+        '</div>' +
+        '<div class="sm:col-span-3">' +
+        '<label class="block text-xs font-medium text-slate-500 mb-1">Categoría</label>' +
+        '<select name="vehicle_category" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">' +
+        buildCategoryOptions() +
+        '</select>' +
+        '</div>' +
+        '<div class="sm:col-span-3">' +
+        '<label class="block text-xs font-medium text-slate-500 mb-1">Tarifa Mensual</label>' +
+        '<input type="number" name="vehicle_rate" class="vehicle-rate w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" placeholder="150000" step="1000" min="0" oninput="calculateTotal()">' +
+        '</div>' +
+        '<div class="sm:col-span-2 flex items-end">' +
+        '<button type="button" onclick="removeVehicleRow(this)" class="w-full px-3 py-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-sm transition-colors">' +
+        '<i class="fas fa-trash"></i>' +
+        '</button>' +
+        '</div>';
+    container.appendChild(row);
+    updateVehicleSelects();
+    checkVehicleRows();
+}
+
+function removeVehicleRow(btn) {
+    var row = btn.closest('.vehicle-row');
+    row.remove();
+    calculateTotal();
+    checkVehicleRows();
+}
+
+function checkVehicleRows() {
+    var rows = document.querySelectorAll('.vehicle-row');
+    document.getElementById('noVehiclesMsg').classList.toggle('hidden', rows.length > 0);
+}
+
+function calculateTotal() {
+    var useCombo = document.getElementById('id_use_combo_rate').checked;
+    var totalEl = document.getElementById('totalRate');
+    var descEl = document.getElementById('totalDescription');
+    
+    if (useCombo) {
+        var comboRate = parseInt(document.getElementById('id_combo_rate').value) || 0;
+        totalEl.textContent = '$' + comboRate.toLocaleString('es-CO');
+        descEl.textContent = 'Tarifa combo aplicada';
+    } else {
+        var total = 0;
+        document.querySelectorAll('.vehicle-rate').forEach(function(input) {
+            total += parseInt(input.value) || 0;
+        });
+        totalEl.textContent = '$' + total.toLocaleString('es-CO');
+        descEl.textContent = 'Suma de tarifas individuales';
+    }
+}
+
+function toggleComboFields() {
+    var useCombo = document.getElementById('id_use_combo_rate').checked;
+    document.getElementById('comboFields').style.display = useCombo ? 'grid' : 'none';
+    calculateTotal();
+}
+
+// Inicializar
+document.addEventListener('DOMContentLoaded', function() {
+    var comboCheckbox = document.getElementById('id_use_combo_rate');
+    if (comboCheckbox) {
+        comboCheckbox.addEventListener('change', toggleComboFields);
+        toggleComboFields();
+    }
+    
+    calculateTotal();
+    
+    // Si hay cliente seleccionado, cargar sus vehículos
+    var clientSelect = document.getElementById('id_third_party');
+    if (clientSelect && clientSelect.value) {
+        clientSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Escuchar cambios en tarifa combo
+    var comboRateInput = document.getElementById('id_combo_rate');
+    if (comboRateInput) {
+        comboRateInput.addEventListener('input', calculateTotal);
+    }
+});
+</script>
 {% endblock %}

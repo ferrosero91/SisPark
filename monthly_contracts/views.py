@@ -3,11 +3,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse
-from django.db.models import Sum, Count
+from django.db.models import Sum
 from datetime import timedelta
 from decimal import Decimal
-from .models import MonthlyContract, ContractPayment
-from .forms import MonthlyContractForm, ContractPaymentForm
+from .models import MonthlyContract, ContractVehicle, ContractPayment
+from .forms import MonthlyContractForm, ContractVehicleForm, ContractPaymentForm
 from third_parties.models import ThirdParty, ThirdPartyVehicle
 from parking.models import VehicleCategory
 from parking.models_config import PaymentMethod
@@ -29,8 +29,8 @@ def contract_list(request):
     
     status_filter = request.GET.get('status', '')
     contracts = MonthlyContract.objects.all_tenants().filter(tenant=tenant).select_related(
-        'third_party', 'vehicle', 'category'
-    ).order_by('-start_date')
+        'third_party'
+    ).prefetch_related('vehicles__vehicle').order_by('-start_date')
     
     if status_filter:
         contracts = contracts.filter(status=status_filter)
@@ -65,6 +65,9 @@ def contract_create(request):
     if not tenant:
         return redirect('dashboard')
     
+    # Obtener categorías para el formulario de vehículos
+    categories = VehicleCategory.objects.all_tenants().filter(tenant=tenant)
+    
     if request.method == 'POST':
         form = MonthlyContractForm(request.POST, tenant=tenant)
         if form.is_valid():
@@ -73,18 +76,41 @@ def contract_create(request):
             contract.created_by = request.user
             contract.save()
             
+            # Procesar vehículos del formulario
+            vehicle_ids = request.POST.getlist('vehicle_id')
+            category_ids = request.POST.getlist('vehicle_category')
+            rates = request.POST.getlist('vehicle_rate')
+            
+            for i, vehicle_id in enumerate(vehicle_ids):
+                if vehicle_id:
+                    try:
+                        vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+                        category = VehicleCategory.objects.get(pk=category_ids[i]) if i < len(category_ids) else None
+                        rate = Decimal(rates[i]) if i < len(rates) and rates[i] else Decimal('0')
+                        
+                        ContractVehicle.objects.create(
+                            contract=contract,
+                            vehicle=vehicle,
+                            category=category,
+                            monthly_rate=rate
+                        )
+                    except (ThirdPartyVehicle.DoesNotExist, VehicleCategory.DoesNotExist, ValueError):
+                        continue
+            
             messages.success(request, 'Contrato creado exitosamente')
-            
-            # Redirigir a registrar pago si se marcó
-            if form.cleaned_data.get('register_payment'):
-                return redirect('contract_payment', pk=contract.pk)
-            
             return redirect('contract_detail', pk=contract.pk)
     else:
-        form = MonthlyContractForm(tenant=tenant)
+        # Valores iniciales
+        today = timezone.now().date()
+        initial = {
+            'start_date': today,
+            'end_date': today + timedelta(days=30)
+        }
+        form = MonthlyContractForm(tenant=tenant, initial=initial)
     
     return render(request, 'monthly_contracts/form.html', {
         'form': form,
+        'categories': categories,
         'title': 'Nuevo Contrato'
     })
 
@@ -95,27 +121,127 @@ def contract_detail(request, pk):
     if not tenant:
         return redirect('dashboard')
     
-    contract = get_object_or_404(MonthlyContract.objects.all_tenants(), pk=pk, tenant=tenant)
-    payments = contract.payments.all().order_by('-payment_date')
+    contract = get_object_or_404(
+        MonthlyContract.objects.all_tenants().prefetch_related('vehicles__vehicle', 'vehicles__category'), 
+        pk=pk, tenant=tenant
+    )
+    payments = contract.payments.all().order_by('-payment_year', '-payment_month')
     
     # Calcular totales
     total_paid = payments.filter(is_confirmed=True).aggregate(total=Sum('amount'))['total'] or Decimal('0')
     
+    # Generar historial de meses (últimos 12 meses)
+    today = timezone.now().date()
+    months_history = []
+    current_month = today.month
+    current_year = today.year
+    
+    for i in range(12):
+        month = current_month - i
+        year = current_year
+        if month <= 0:
+            month += 12
+            year -= 1
+        
+        payment = payments.filter(payment_month=month, payment_year=year).first()
+        months_history.append({
+            'month': month,
+            'year': year,
+            'month_name': ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][month],
+            'paid': payment is not None,
+            'payment': payment
+        })
+    
     return render(request, 'monthly_contracts/detail.html', {
         'contract': contract,
         'payments': payments,
-        'total_paid': total_paid
+        'total_paid': total_paid,
+        'months_history': months_history,
     })
 
 
 @login_required
-def contract_payment(request, pk):
-    """Vista para registrar un pago de contrato"""
+def contract_edit(request, pk):
+    """Editar un contrato"""
     tenant = get_tenant(request)
     if not tenant:
         return redirect('dashboard')
     
     contract = get_object_or_404(MonthlyContract.objects.all_tenants(), pk=pk, tenant=tenant)
+    categories = VehicleCategory.objects.all_tenants().filter(tenant=tenant)
+    
+    if request.method == 'POST':
+        form = MonthlyContractForm(request.POST, instance=contract, tenant=tenant)
+        if form.is_valid():
+            form.save()
+            
+            # Eliminar vehículos existentes y recrear
+            contract.vehicles.all().delete()
+            
+            vehicle_ids = request.POST.getlist('vehicle_id')
+            category_ids = request.POST.getlist('vehicle_category')
+            rates = request.POST.getlist('vehicle_rate')
+            
+            for i, vehicle_id in enumerate(vehicle_ids):
+                if vehicle_id:
+                    try:
+                        vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+                        category = VehicleCategory.objects.get(pk=category_ids[i]) if i < len(category_ids) else None
+                        rate = Decimal(rates[i]) if i < len(rates) and rates[i] else Decimal('0')
+                        
+                        ContractVehicle.objects.create(
+                            contract=contract,
+                            vehicle=vehicle,
+                            category=category,
+                            monthly_rate=rate
+                        )
+                    except (ThirdPartyVehicle.DoesNotExist, VehicleCategory.DoesNotExist, ValueError):
+                        continue
+            
+            messages.success(request, 'Contrato actualizado exitosamente')
+            return redirect('contract_detail', pk=pk)
+    else:
+        form = MonthlyContractForm(instance=contract, tenant=tenant)
+    
+    return render(request, 'monthly_contracts/form.html', {
+        'form': form,
+        'contract': contract,
+        'categories': categories,
+        'title': 'Editar Contrato'
+    })
+
+
+@login_required
+def contract_delete(request, pk):
+    """Eliminar un contrato"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    contract = get_object_or_404(MonthlyContract.objects.all_tenants(), pk=pk, tenant=tenant)
+    
+    if request.method == 'POST':
+        client_name = contract.third_party.full_name
+        contract.delete()
+        messages.success(request, f'Contrato de {client_name} eliminado')
+        return redirect('contract_list')
+    
+    return render(request, 'monthly_contracts/confirm_delete.html', {
+        'contract': contract
+    })
+
+
+@login_required
+def contract_payment(request, pk):
+    """Vista para registrar un pago de contrato para un mes específico"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    contract = get_object_or_404(
+        MonthlyContract.objects.all_tenants().prefetch_related('vehicles__vehicle'), 
+        pk=pk, tenant=tenant
+    )
     
     # Obtener métodos de pago
     payment_methods = PaymentMethod.objects.all_tenants().filter(
@@ -124,36 +250,85 @@ def contract_payment(request, pk):
         allow_for_contracts=True
     ).order_by('order', 'name')
     
+    today = timezone.now().date()
+    
+    # Obtener el mes/año del query string o calcular el próximo
+    payment_month = request.GET.get('month')
+    payment_year = request.GET.get('year')
+    
+    if payment_month and payment_year:
+        payment_month = int(payment_month)
+        payment_year = int(payment_year)
+    else:
+        last_payment = contract.payments.filter(is_confirmed=True).order_by('-payment_year', '-payment_month').first()
+        
+        if last_payment:
+            payment_month = last_payment.payment_month + 1
+            payment_year = last_payment.payment_year
+            if payment_month > 12:
+                payment_month = 1
+                payment_year += 1
+        else:
+            payment_month = contract.start_date.month
+            payment_year = contract.start_date.year
+    
+    # Verificar si ya existe pago para este mes
+    existing_payment = contract.payments.filter(
+        payment_month=payment_month,
+        payment_year=payment_year,
+        is_confirmed=True
+    ).exists()
+    
+    if existing_payment:
+        month_names = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+                       "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        messages.warning(request, f'Ya existe un pago registrado para {month_names[payment_month]} {payment_year}')
+        return redirect('contract_detail', pk=pk)
+    
     if request.method == 'POST':
-        form = ContractPaymentForm(request.POST, tenant=tenant)
-        if form.is_valid():
-            payment = form.save(commit=False)
-            payment.contract = contract
-            payment.tenant = tenant
-            payment.received_by = request.user
+        payment_method_id = request.POST.get('payment_method')
+        amount = Decimal(request.POST.get('amount', contract.monthly_rate))
+        amount_received = request.POST.get('amount_received')
+        reference = request.POST.get('reference', '')
+        notes = request.POST.get('notes', '')
+        
+        try:
+            payment = ContractPayment(
+                contract=contract,
+                tenant=tenant,
+                payment_method_id=payment_method_id if payment_method_id else None,
+                amount=amount,
+                payment_month=payment_month,
+                payment_year=payment_year,
+                reference=reference,
+                notes=notes,
+                received_by=request.user,
+                is_confirmed=True
+            )
             
-            # Calcular período
-            today = timezone.now().date()
-            payment.period_start = contract.end_date if contract.end_date >= today else today
-            payment.period_end = payment.period_start + timedelta(days=30 * payment.months_paid)
+            if amount_received:
+                payment.amount_received = Decimal(amount_received)
             
             payment.save()
             
-            # Renovar contrato
-            contract.renew(months=payment.months_paid)
-            
-            messages.success(request, f'Pago de ${payment.amount:,.0f} registrado exitosamente')
+            month_names = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+                           "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            messages.success(request, f'Pago de ${amount:,.0f} registrado para {month_names[payment_month]} {payment_year}')
             return redirect('contract_detail', pk=pk)
-    else:
-        form = ContractPaymentForm(tenant=tenant, initial={
-            'amount': contract.monthly_rate,
-            'months_paid': 1
-        })
+            
+        except Exception as e:
+            messages.error(request, f'Error al registrar el pago: {str(e)}')
+    
+    month_names = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+                   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
     return render(request, 'monthly_contracts/payment.html', {
         'contract': contract,
-        'form': form,
-        'payment_methods': payment_methods
+        'payment_methods': payment_methods,
+        'payment_month': payment_month,
+        'payment_year': payment_year,
+        'month_name': month_names[payment_month],
+        'amount': contract.monthly_rate
     })
 
 
@@ -172,30 +347,26 @@ def pending_payments(request):
     
     today = timezone.now().date()
     
-    # Contratos vencidos
     expired = MonthlyContract.objects.all_tenants().filter(
         tenant=tenant,
         is_active=True,
         end_date__lt=today
-    ).select_related('third_party', 'vehicle', 'category').order_by('end_date')
+    ).select_related('third_party').prefetch_related('vehicles__vehicle').order_by('end_date')
     
-    # Contratos por vencer (próximos 7 días)
     expiring = MonthlyContract.objects.all_tenants().filter(
         tenant=tenant,
         is_active=True,
         status='active',
         end_date__gte=today,
         end_date__lte=today + timedelta(days=7)
-    ).select_related('third_party', 'vehicle', 'category').order_by('end_date')
+    ).select_related('third_party').prefetch_related('vehicles__vehicle').order_by('end_date')
     
-    # Contratos pendientes de pago inicial
     pending = MonthlyContract.objects.all_tenants().filter(
         tenant=tenant,
         is_active=True,
         status='pending'
-    ).select_related('third_party', 'vehicle', 'category').order_by('-created_at')
+    ).select_related('third_party').prefetch_related('vehicles__vehicle').order_by('-created_at')
     
-    # Calcular totales
     total_expired = sum(c.monthly_rate for c in expired)
     total_expiring = sum(c.monthly_rate for c in expiring)
     total_pending = sum(c.monthly_rate for c in pending)
@@ -218,14 +389,13 @@ def payment_history(request):
     if not tenant:
         return redirect('dashboard')
     
-    # Filtros
     date_from = request.GET.get('from', '')
     date_to = request.GET.get('to', '')
     
     payments = ContractPayment.objects.filter(
         tenant=tenant,
         is_confirmed=True
-    ).select_related('contract', 'contract__third_party', 'contract__vehicle', 'payment_method', 'received_by')
+    ).select_related('contract', 'contract__third_party', 'payment_method', 'received_by')
     
     if date_from:
         payments = payments.filter(payment_date__date__gte=date_from)
@@ -234,7 +404,6 @@ def payment_history(request):
     
     payments = payments.order_by('-payment_date')
     
-    # Totales
     total = payments.aggregate(total=Sum('amount'))['total'] or Decimal('0')
     
     return render(request, 'monthly_contracts/payment_history.html', {
@@ -263,8 +432,8 @@ def print_payment_receipt(request, payment_id):
 
 
 @login_required
-def get_vehicle_info(request):
-    """API para obtener info del vehículo al seleccionar tercero"""
+def get_client_vehicles(request):
+    """API para obtener vehículos de un cliente"""
     tenant = get_tenant(request)
     third_party_id = request.GET.get('third_party_id')
     
@@ -275,6 +444,73 @@ def get_vehicle_info(request):
         third_party_id=third_party_id,
         third_party__tenant=tenant,
         is_active=True
-    ).values('id', 'plate', 'brand', 'model', 'color')
+    ).values('id', 'plate', 'brand', 'model', 'color', 'vehicle_type')
     
     return JsonResponse({'vehicles': list(vehicles)})
+
+
+@login_required
+def add_contract_vehicle(request, pk):
+    """Agregar un vehículo a un contrato existente"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    contract = get_object_or_404(MonthlyContract.objects.all_tenants(), pk=pk, tenant=tenant)
+    categories = VehicleCategory.objects.all_tenants().filter(tenant=tenant)
+    
+    # Vehículos del cliente que no están en el contrato
+    existing_vehicle_ids = contract.vehicles.values_list('vehicle_id', flat=True)
+    available_vehicles = ThirdPartyVehicle.objects.filter(
+        third_party=contract.third_party,
+        is_active=True
+    ).exclude(id__in=existing_vehicle_ids)
+    
+    if request.method == 'POST':
+        vehicle_id = request.POST.get('vehicle')
+        category_id = request.POST.get('category')
+        rate = request.POST.get('monthly_rate')
+        
+        try:
+            vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+            category = VehicleCategory.objects.get(pk=category_id)
+            
+            ContractVehicle.objects.create(
+                contract=contract,
+                vehicle=vehicle,
+                category=category,
+                monthly_rate=Decimal(rate)
+            )
+            messages.success(request, f'Vehículo {vehicle.plate} agregado al contrato')
+        except Exception as e:
+            messages.error(request, f'Error al agregar vehículo: {str(e)}')
+        
+        return redirect('contract_detail', pk=pk)
+    
+    return render(request, 'monthly_contracts/add_vehicle.html', {
+        'contract': contract,
+        'available_vehicles': available_vehicles,
+        'categories': categories
+    })
+
+
+@login_required
+def remove_contract_vehicle(request, pk, vehicle_pk):
+    """Eliminar un vehículo de un contrato"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    contract = get_object_or_404(MonthlyContract.objects.all_tenants(), pk=pk, tenant=tenant)
+    contract_vehicle = get_object_or_404(ContractVehicle, pk=vehicle_pk, contract=contract)
+    
+    if request.method == 'POST':
+        plate = contract_vehicle.vehicle.plate
+        contract_vehicle.delete()
+        messages.success(request, f'Vehículo {plate} eliminado del contrato')
+        return redirect('contract_detail', pk=pk)
+    
+    return render(request, 'monthly_contracts/remove_vehicle.html', {
+        'contract': contract,
+        'contract_vehicle': contract_vehicle
+    })

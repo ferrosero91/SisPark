@@ -75,7 +75,7 @@
                 <thead class="bg-slate-50 border-b border-slate-200">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Cliente</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehículo</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehículos</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Venció</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Días</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Tarifa</th>
@@ -90,7 +90,12 @@
                             <div class="text-sm text-slate-500">{{ contract.third_party.phone|default:"-" }}</div>
                         </td>
                         <td class="px-4 py-3">
-                            <span class="font-bold text-slate-900">{{ contract.vehicle.plate }}</span>
+                            {% if contract.use_combo_rate and contract.combo_name %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                <i class="fas fa-box"></i> {{ contract.combo_name }}
+                            </span>
+                            {% endif %}
+                            <span class="font-mono text-slate-900 text-sm">{{ contract.vehicles_list|default:"Sin vehículos" }}</span>
                         </td>
                         <td class="px-4 py-3 text-red-600">{{ contract.end_date|date:"d/m/Y" }}</td>
                         <td class="px-4 py-3">
@@ -128,7 +133,7 @@
                 <thead class="bg-slate-50 border-b border-slate-200">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Cliente</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehículo</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehículos</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vence</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Días</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Tarifa</th>
@@ -143,7 +148,12 @@
                             <div class="text-sm text-slate-500">{{ contract.third_party.phone|default:"-" }}</div>
                         </td>
                         <td class="px-4 py-3">
-                            <span class="font-bold text-slate-900">{{ contract.vehicle.plate }}</span>
+                            {% if contract.use_combo_rate and contract.combo_name %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                <i class="fas fa-box"></i> {{ contract.combo_name }}
+                            </span>
+                            {% endif %}
+                            <span class="font-mono text-slate-900 text-sm">{{ contract.vehicles_list|default:"Sin vehículos" }}</span>
                         </td>
                         <td class="px-4 py-3 text-amber-600">{{ contract.end_date|date:"d/m/Y" }}</td>
                         <td class="px-4 py-3">
@@ -181,7 +191,7 @@
                 <thead class="bg-slate-50 border-b border-slate-200">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Cliente</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehículo</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Vehículos</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Creado</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Tarifa</th>
                         <th class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Acción</th>
@@ -195,7 +205,12 @@
                             <div class="text-sm text-slate-500">{{ contract.third_party.phone|default:"-" }}</div>
                         </td>
                         <td class="px-4 py-3">
-                            <span class="font-bold text-slate-900">{{ contract.vehicle.plate }}</span>
+                            {% if contract.use_combo_rate and contract.combo_name %}
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                <i class="fas fa-box"></i> {{ contract.combo_name }}
+                            </span>
+                            {% endif %}
+                            <span class="font-mono text-slate-900 text-sm">{{ contract.vehicles_list|default:"Sin vehículos" }}</span>
                         </td>
                         <td class="px-4 py-3 text-slate-600">{{ contract.created_at|date:"d/m/Y" }}</td>
                         <td class="px-4 py-3 font-bold text-slate-900">${{ contract.monthly_rate|floatformat:0|intcomma }}</td>
