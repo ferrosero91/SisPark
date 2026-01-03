@@ -1,0 +1,73 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Métodos de Pago - SoluPark{% endblock %}
+{% block page_title %}Métodos de Pago{% endblock %}
+{% block page_subtitle %}Configura las formas de pago{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <a href="{% url 'config_dashboard' %}" class="text-slate-600 hover:text-slate-800">
+            <i class="fas fa-arrow-left mr-2"></i> Volver a configuración
+        </a>
+        <a href="{% url 'payment_method_create' %}" class="bg-sky-600 hover:bg-sky-700 text-white font-medium py-2 px-4 rounded-xl transition-colors">
+            <i class="fas fa-plus mr-2"></i> Nuevo Método
+        </a>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        {% if methods %}
+        <div class="divide-y divide-slate-100">
+            {% for method in methods %}
+            <div class="p-4 flex items-center justify-between hover:bg-slate-50">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 {% if method.is_credit %}bg-amber-100{% else %}bg-emerald-100{% endif %} rounded-xl flex items-center justify-center">
+                        <i class="fas {{ method.icon }} {% if method.is_credit %}text-amber-600{% else %}text-emerald-600{% endif %} text-lg"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-slate-900">{{ method.name }}</span>
+                            {% if method.is_credit %}
+                            <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">Crédito</span>
+                            {% endif %}
+                            {% if not method.is_active %}
+                            <span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs font-medium">Inactivo</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-sm text-slate-500">
+                            {{ method.get_payment_type_display }}
+                            {% if method.description %} · {{ method.description }}{% endif %}
+                        </p>
+                        <div class="flex gap-3 mt-1 text-xs">
+                            {% if method.allow_for_exit %}
+                            <span class="text-emerald-600"><i class="fas fa-check mr-1"></i>Salidas</span>
+                            {% endif %}
+                            {% if method.allow_for_contracts %}
+                            <span class="text-sky-600"><i class="fas fa-check mr-1"></i>Contratos</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{% url 'payment_method_edit' method.pk %}" class="p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <a href="{% url 'payment_method_delete' method.pk %}" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <i class="fas fa-trash"></i>
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <i class="fas fa-credit-card text-5xl text-slate-300 mb-4"></i>
+            <p class="text-slate-500 mb-4">No hay métodos de pago configurados</p>
+            <a href="{% url 'payment_method_create' %}" class="inline-flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-medium py-2 px-4 rounded-xl">
+                <i class="fas fa-plus"></i> Crear primer método
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

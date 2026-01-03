@@ -1,0 +1,99 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Configuración - SoluPark{% endblock %}
+{% block page_title %}Configuración{% endblock %}
+{% block page_subtitle %}Administra tu parqueadero{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Info del parqueadero -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-building text-sky-500"></i>
+                {{ tenant.name }}
+            </h3>
+            <a href="{% url 'config_parking_info' %}" class="text-sky-600 hover:text-sky-700 text-sm font-medium">
+                <i class="fas fa-edit mr-1"></i> Editar
+            </a>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+                <span class="text-slate-500">NIT:</span>
+                <span class="font-medium text-slate-900 ml-1">{{ tenant.nit }}</span>
+            </div>
+            <div>
+                <span class="text-slate-500">Teléfono:</span>
+                <span class="font-medium text-slate-900 ml-1">{{ tenant.phone }}</span>
+            </div>
+            <div>
+                <span class="text-slate-500">Email:</span>
+                <span class="font-medium text-slate-900 ml-1">{{ tenant.email }}</span>
+            </div>
+            <div>
+                <span class="text-slate-500">Ciudad:</span>
+                <span class="font-medium text-slate-900 ml-1">{{ tenant.city|default:"-" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Módulos de configuración -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Categorías -->
+        <a href="{% url 'category-list' %}" class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-sky-300 transition-all group">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                    <i class="fas fa-tags text-emerald-600 text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-slate-900">Categorías</h4>
+                    <p class="text-sm text-slate-500">{{ stats.categories }} categorías</p>
+                </div>
+            </div>
+            <p class="mt-4 text-sm text-slate-600">Tipos de vehículos y tarifas por hora</p>
+        </a>
+
+        <!-- Métodos de pago -->
+        <a href="{% url 'payment_method_list' %}" class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-sky-300 transition-all group">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-violet-100 rounded-2xl flex items-center justify-center group-hover:bg-violet-200 transition-colors">
+                    <i class="fas fa-credit-card text-violet-600 text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-slate-900">Métodos de Pago</h4>
+                    <p class="text-sm text-slate-500">{{ stats.payment_methods }} métodos</p>
+                </div>
+            </div>
+            <p class="mt-4 text-sm text-slate-600">Efectivo, Nequi, Daviplata, crédito, etc.</p>
+        </a>
+
+        <!-- Usuarios -->
+        <a href="{% url 'config_users' %}" class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-sky-300 transition-all group">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center group-hover:bg-amber-200 transition-colors">
+                    <i class="fas fa-users text-amber-600 text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-slate-900">Usuarios</h4>
+                    <p class="text-sm text-slate-500">{{ stats.users }} usuarios</p>
+                </div>
+            </div>
+            <p class="mt-4 text-sm text-slate-600">Administradores y operadores</p>
+        </a>
+
+        <!-- Info Parqueadero -->
+        <a href="{% url 'config_parking_info' %}" class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-sky-300 transition-all group">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-sky-100 rounded-2xl flex items-center justify-center group-hover:bg-sky-200 transition-colors">
+                    <i class="fas fa-building text-sky-600 text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-slate-900">Mi Parqueadero</h4>
+                    <p class="text-sm text-slate-500">Información general</p>
+                </div>
+            </div>
+            <p class="mt-4 text-sm text-slate-600">Nombre, dirección, contacto, logo</p>
+        </a>
+    </div>
+</div>
+{% endblock %}

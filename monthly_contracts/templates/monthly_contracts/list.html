@@ -1,0 +1,145 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Mensualidades - SoluPark{% endblock %}
+{% block page_title %}Contratos Mensuales{% endblock %}
+{% block page_subtitle %}Gestión de mensualidades{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Alertas de contratos por vencer -->
+    {% if expiring_soon %}
+    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-amber-600"></i>
+            </div>
+            <div>
+                <h4 class="font-semibold text-amber-800">Contratos por vencer</h4>
+                <p class="text-sm text-amber-700 mt-1">
+                    Hay {{ expiring_soon.count }} contrato(s) que vencen en los próximos 5 días
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Header con filtros y botón crear -->
+    <div class="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <div class="flex items-center gap-2">
+            <a href="{% url 'contract_list' %}" 
+               class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if not status_filter %}bg-primary-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+                Todos
+            </a>
+            <a href="{% url 'contract_list' %}?status=active" 
+               class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if status_filter == 'active' %}bg-emerald-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+                Activos
+            </a>
+            <a href="{% url 'contract_list' %}?status=expired" 
+               class="px-4 py-2 rounded-xl text-sm font-medium transition-colors {% if status_filter == 'expired' %}bg-red-600 text-white{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+                Vencidos
+            </a>
+        </div>
+        <a href="{% url 'contract_create' %}" 
+           class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-primary-500/30">
+            <i class="fas fa-plus"></i>
+            Nuevo Contrato
+        </a>
+    </div>
+
+    <!-- Lista de contratos -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        {% if contracts %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Cliente</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vehículo</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vigencia</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Tarifa</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Estado</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for contract in contracts %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                    {{ contract.third_party.first_name.0|upper }}{{ contract.third_party.last_name.0|upper }}
+                                </div>
+                                <div>
+                                    <div class="font-medium text-slate-900">{{ contract.third_party.full_name }}</div>
+                                    <div class="text-sm text-slate-500">{{ contract.third_party.phone|default:"-" }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-car text-slate-400"></i>
+                                <span class="font-bold text-slate-900">{{ contract.vehicle.plate }}</span>
+                            </div>
+                            <div class="text-sm text-slate-500">{{ contract.category.name }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-slate-900">{{ contract.start_date|date:"d/m/Y" }}</div>
+                            <div class="text-sm text-slate-500">al {{ contract.end_date|date:"d/m/Y" }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="font-bold text-slate-900">${{ contract.monthly_rate|floatformat:0 }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if contract.status == 'active' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
+                                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                Activo
+                            </span>
+                            {% elif contract.status == 'expired' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                                <span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                Vencido
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium">
+                                <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                                {{ contract.get_status_display }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="{% url 'contract_detail' contract.pk %}" 
+                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-primary-600 hover:bg-primary-50 rounded-lg text-sm font-medium transition-colors">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if contract.status == 'active' or contract.status == 'expired' %}
+                                <a href="{% url 'contract_renew' contract.pk %}" 
+                                   class="inline-flex items-center gap-1 px-3 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-medium transition-colors">
+                                    <i class="fas fa-sync-alt"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-file-contract text-2xl text-slate-400"></i>
+            </div>
+            <h3 class="text-lg font-medium text-slate-900 mb-2">No hay contratos registrados</h3>
+            <p class="text-slate-500 mb-6">Comienza creando tu primer contrato mensual</p>
+            <a href="{% url 'contract_create' %}" 
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors">
+                <i class="fas fa-plus"></i>
+                Nuevo Contrato
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

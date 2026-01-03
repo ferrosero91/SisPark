@@ -1,0 +1,109 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Clientes - SoluPark{% endblock %}
+{% block page_title %}Clientes{% endblock %}
+{% block page_subtitle %}Gestión de clientes y terceros{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header con búsqueda y botón crear -->
+    <div class="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <form method="get" class="flex-1 max-w-md">
+            <div class="relative">
+                <input type="text" name="search" value="{{ search }}" 
+                       placeholder="Buscar por nombre, documento o placa..."
+                       class="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            </div>
+        </form>
+        <a href="{% url 'third_party_create' %}" 
+           class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-primary-500/30">
+            <i class="fas fa-plus"></i>
+            Nuevo Cliente
+        </a>
+    </div>
+
+    <!-- Lista de clientes -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        {% if third_parties %}
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Cliente</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Documento</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Contacto</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vehículos</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Estado</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for tp in third_parties %}
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                    {{ tp.first_name.0|upper }}{{ tp.last_name.0|upper }}
+                                </div>
+                                <div>
+                                    <div class="font-medium text-slate-900">{{ tp.full_name }}</div>
+                                    <div class="text-sm text-slate-500">{{ tp.email|default:"-" }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-slate-600">{{ tp.get_document_type_display }}</span>
+                            <span class="font-medium text-slate-900">{{ tp.document_number }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-slate-600">
+                            {{ tp.phone|default:"-" }}
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">
+                                <i class="fas fa-car text-xs"></i>
+                                {{ tp.vehicles.count }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if tp.is_active %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
+                                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                Activo
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium">
+                                <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                                Inactivo
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <a href="{% url 'third_party_detail' tp.pk %}" 
+                               class="inline-flex items-center gap-1 px-3 py-1.5 text-primary-600 hover:bg-primary-50 rounded-lg text-sm font-medium transition-colors">
+                                <i class="fas fa-eye"></i>
+                                Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-users text-2xl text-slate-400"></i>
+            </div>
+            <h3 class="text-lg font-medium text-slate-900 mb-2">No hay clientes registrados</h3>
+            <p class="text-slate-500 mb-6">Comienza agregando tu primer cliente</p>
+            <a href="{% url 'third_party_create' %}" 
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors">
+                <i class="fas fa-plus"></i>
+                Nuevo Cliente
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

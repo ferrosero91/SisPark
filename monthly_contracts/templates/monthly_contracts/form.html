@@ -1,0 +1,101 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}{{ title }} - SoluPark{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}Crear nuevo contrato mensual{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-user text-primary-500"></i>
+                Cliente y Vehículo
+            </h3>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
+                {{ form.third_party }}
+                {% if form.third_party.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.third_party.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Vehículo</label>
+                {{ form.vehicle }}
+                {% if form.vehicle.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.vehicle.errors.0 }}</p>
+                {% endif %}
+                <p class="mt-1 text-xs text-slate-500">Seleccione primero un cliente para ver sus vehículos</p>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
+                {{ form.category }}
+                {% if form.category.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.category.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-calendar text-primary-500"></i>
+                Vigencia y Tarifa
+            </h3>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Tarifa Mensual</label>
+                {{ form.monthly_rate }}
+                {% if form.monthly_rate.errors %}
+                <p class="mt-1 text-sm text-red-600">{{ form.monthly_rate.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de Inicio</label>
+                    {{ form.start_date }}
+                    {% if form.start_date.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.start_date.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de Vencimiento</label>
+                    {{ form.end_date }}
+                    {% if form.end_date.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.end_date.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Notas</label>
+                {{ form.notes }}
+            </div>
+            
+            <div class="flex items-center gap-2 p-4 bg-emerald-50 rounded-xl">
+                {{ form.initial_payment }}
+                <label for="id_initial_payment" class="text-sm text-emerald-800">
+                    Registrar pago inicial al crear el contrato
+                </label>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <button type="submit" 
+                    class="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-primary-500/30">
+                <i class="fas fa-save"></i>
+                Crear Contrato
+            </button>
+            <a href="{% url 'contract_list' %}" 
+               class="inline-flex items-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,294 @@
+{% extends 'parking/base.html' %}
+{% load humanize %}
+
+{% block title %}Reportes - SoluPark{% endblock %}
+{% block page_title %}Reportes{% endblock %}
+{% block page_subtitle %}{{ start_date|date:"d/m/Y" }} - {{ end_date|date:"d/m/Y" }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 lg:space-y-5">
+    
+    <!-- Filtros rápidos -->
+    <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm text-slate-500 mr-1 hidden sm:inline">Período:</span>
+        <a href="?period=today" class="px-2 lg:px-3 py-1.5 text-xs lg:text-sm rounded-lg border {% if period == 'today' %}bg-slate-800 text-white border-slate-800{% else %}bg-white text-slate-600 border-slate-200 hover:border-slate-300{% endif %}">
+            Hoy
+        </a>
+        <a href="?period=yesterday" class="px-2 lg:px-3 py-1.5 text-xs lg:text-sm rounded-lg border {% if period == 'yesterday' %}bg-slate-800 text-white border-slate-800{% else %}bg-white text-slate-600 border-slate-200 hover:border-slate-300{% endif %}">
+            Ayer
+        </a>
+        <a href="?period=week" class="px-2 lg:px-3 py-1.5 text-xs lg:text-sm rounded-lg border {% if period == 'week' %}bg-slate-800 text-white border-slate-800{% else %}bg-white text-slate-600 border-slate-200 hover:border-slate-300{% endif %}">
+            Semana
+        </a>
+        <a href="?period=month" class="px-2 lg:px-3 py-1.5 text-xs lg:text-sm rounded-lg border {% if period == 'month' %}bg-slate-800 text-white border-slate-800{% else %}bg-white text-slate-600 border-slate-200 hover:border-slate-300{% endif %}">
+            Mes
+        </a>
+        <a href="?period=year" class="px-2 lg:px-3 py-1.5 text-xs lg:text-sm rounded-lg border {% if period == 'year' %}bg-slate-800 text-white border-slate-800{% else %}bg-white text-slate-600 border-slate-200 hover:border-slate-300{% endif %}">
+            Año
+        </a>
+    </div>
+
+    <!-- Filtros de fecha y exportación -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <form method="get" class="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="period" value="custom">
+            <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}"
+                   class="px-2 lg:px-3 py-2 border border-slate-200 rounded-lg text-sm w-[130px]">
+            <span class="text-slate-400 text-sm">a</span>
+            <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}"
+                   class="px-2 lg:px-3 py-2 border border-slate-200 rounded-lg text-sm w-[130px]">
+            <button type="submit" class="px-3 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-700">
+                Filtrar
+            </button>
+        </form>
+        
+        <div class="flex gap-2">
+            <a href="{% url 'report_excel' %}?start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}" 
+               class="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-file-excel"></i><span class="hidden sm:inline ml-1">Excel</span>
+            </a>
+            <a href="{% url 'report_pdf' %}?start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}" 
+               class="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
+                <i class="fas fa-file-pdf"></i><span class="hidden sm:inline ml-1">PDF</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Resumen principal -->
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
+        <div class="bg-white rounded-xl border border-slate-200 p-3 lg:p-5">
+            <p class="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide">Tickets</p>
+            <p class="text-xl lg:text-2xl font-bold text-slate-800 mt-1">{{ summary.total_vehicles|default:0 }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-3 lg:p-5">
+            <p class="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide">Parqueadero</p>
+            <p class="text-lg lg:text-2xl font-bold text-emerald-600 mt-1">${{ summary.total_revenue|default:0|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-3 lg:p-5">
+            <p class="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide">Mensualidades</p>
+            <p class="text-lg lg:text-2xl font-bold text-sky-600 mt-1">${{ contracts_revenue|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-3 lg:p-5">
+            <p class="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide">Por Cobrar</p>
+            <p class="text-lg lg:text-2xl font-bold text-amber-600 mt-1">${{ pending_total|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="bg-slate-800 rounded-xl p-3 lg:p-5 text-white col-span-2 lg:col-span-1">
+            <p class="text-[10px] lg:text-xs text-slate-400 uppercase tracking-wide">Total Ingresos</p>
+            <p class="text-xl lg:text-2xl font-bold mt-1">${{ total_general|floatformat:0|intcomma }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        
+        <!-- Columna izquierda -->
+        <div class="lg:col-span-2 space-y-5">
+            
+            <!-- Ingresos por método de pago -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Ingresos por Método de Pago</h3>
+                </div>
+                <div class="p-5">
+                    {% if payment_stats %}
+                    <div class="space-y-3">
+                        {% for item in payment_stats %}
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center {% if item.is_cash %}bg-emerald-100 text-emerald-600{% else %}bg-slate-100 text-slate-500{% endif %}">
+                                    <i class="fas {{ item.icon|default:'fa-credit-card' }} text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">{{ item.name }}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-semibold text-slate-800">${{ item.total|floatformat:0|intcomma }}</span>
+                                <span class="text-xs text-slate-400 ml-2">({{ item.count }})</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-4">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ingresos diarios -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Ingresos Diarios</h3>
+                </div>
+                {% if daily_stats %}
+                <div class="max-h-64 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 sticky top-0">
+                            <tr>
+                                <th class="px-5 py-2 text-left text-xs text-slate-500 uppercase">Fecha</th>
+                                <th class="px-5 py-2 text-center text-xs text-slate-500 uppercase">Tickets</th>
+                                <th class="px-5 py-2 text-right text-xs text-slate-500 uppercase">Ingresos</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            {% for stat in daily_stats %}
+                            <tr>
+                                <td class="px-5 py-3 text-slate-700">{{ stat.date|date:"d/m/Y" }}</td>
+                                <td class="px-5 py-3 text-center text-slate-600">{{ stat.count }}</td>
+                                <td class="px-5 py-3 text-right font-medium text-slate-800">${{ stat.revenue|floatformat:0|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-center text-slate-400 py-8">Sin datos</p>
+                {% endif %}
+            </div>
+
+            <!-- Historial de salidas -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Historial de Salidas</h3>
+                </div>
+                {% if recent_exits %}
+                <div class="max-h-80 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs text-slate-500 uppercase">Fecha</th>
+                                <th class="px-4 py-2 text-left text-xs text-slate-500 uppercase">Placa</th>
+                                <th class="px-4 py-2 text-left text-xs text-slate-500 uppercase">Categoría</th>
+                                <th class="px-4 py-2 text-left text-xs text-slate-500 uppercase">Método</th>
+                                <th class="px-4 py-2 text-right text-xs text-slate-500 uppercase">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            {% for ticket in recent_exits %}
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-4 py-2 text-slate-600">{{ ticket.exit_time|date:"d/m H:i" }}</td>
+                                <td class="px-4 py-2 font-mono text-slate-800">{{ ticket.placa }}</td>
+                                <td class="px-4 py-2 text-slate-600">{{ ticket.category.name|default:"-" }}</td>
+                                <td class="px-4 py-2 text-slate-600">{{ ticket.payment_method.name|default:"Efectivo" }}</td>
+                                <td class="px-4 py-2 text-right font-medium text-slate-800">${{ ticket.amount_paid|floatformat:0|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-center text-slate-400 py-8">Sin salidas registradas</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Columna derecha -->
+        <div class="space-y-5">
+            
+            <!-- Por categoría -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Por Categoría</h3>
+                </div>
+                <div class="p-5">
+                    {% if category_stats %}
+                    <div class="space-y-3">
+                        {% for stat in category_stats %}
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-slate-700">{{ stat.category__name }}</span>
+                                <span class="text-xs text-slate-400 ml-1">({{ stat.count }})</span>
+                            </div>
+                            <span class="font-semibold text-slate-800">${{ stat.revenue|floatformat:0|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-4">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Vehículos frecuentes -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Vehículos Frecuentes</h3>
+                </div>
+                <div class="p-5">
+                    {% if frequent_vehicles %}
+                    <div class="space-y-2">
+                        {% for v in frequent_vehicles %}
+                        <div class="flex items-center justify-between py-1">
+                            <div class="flex items-center gap-2">
+                                <span class="w-5 h-5 bg-slate-100 rounded text-xs flex items-center justify-center text-slate-500">{{ forloop.counter }}</span>
+                                <span class="font-mono text-sm text-slate-700">{{ v.placa }}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs text-slate-400">{{ v.visits }}x</span>
+                                <span class="text-sm font-medium text-slate-700 ml-2">${{ v.total_spent|floatformat:0|intcomma }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-4">Sin datos</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Cuentas por cobrar -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-800">Cuentas por Cobrar</h3>
+                    <span class="text-lg font-bold text-amber-600">${{ pending_total|floatformat:0|intcomma }}</span>
+                </div>
+                <div class="p-5">
+                    {% if pending_contracts %}
+                    <div class="space-y-3 max-h-48 overflow-y-auto">
+                        {% for c in pending_contracts %}
+                        <div class="flex items-center justify-between text-sm">
+                            <div>
+                                <span class="font-mono text-slate-700">{{ c.vehicle.plate }}</span>
+                                <span class="text-xs text-slate-400 block">{{ c.third_party|truncatechars:15 }}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-medium text-slate-800">${{ c.monthly_rate|floatformat:0|intcomma }}</span>
+                                <span class="text-xs text-red-500 block">Vencido {{ c.end_date|date:"d/m" }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <a href="{% url 'pending_payments' %}" class="block text-center text-sm text-sky-600 hover:text-sky-700 mt-4">
+                        Ver todos →
+                    </a>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-4">Sin cuentas pendientes</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Pagos de mensualidades -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-800">Mensualidades</h3>
+                    <span class="text-lg font-bold text-sky-600">${{ contracts_revenue|floatformat:0|intcomma }}</span>
+                </div>
+                <div class="p-5">
+                    {% if contract_payments %}
+                    <div class="space-y-2 max-h-48 overflow-y-auto">
+                        {% for p in contract_payments %}
+                        <div class="flex items-center justify-between text-sm">
+                            <div>
+                                <span class="font-mono text-slate-700">{{ p.contract.vehicle.plate|default:"-" }}</span>
+                                <span class="text-xs text-slate-400 block">{{ p.payment_date|date:"d/m H:i" }}</span>
+                            </div>
+                            <span class="font-medium text-slate-800">${{ p.amount|floatformat:0|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-4">Sin pagos en el período</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends 'parking/base.html' %}
+
+{% block content %}
+<div class="p-6">
+    <h1 class="text-2xl font-bold mb-4">Cuadro de Caja</h1>
+
+    <!-- Resumen de Caja -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6">
+        <h2 class="font-bold text-lg">Saldo Actual en Caja: ${{ saldo|floatformat:2 }}</h2>
+        <p class="text-sm">Dinero Inicial en Caja: ${{ dinero_inicial|floatformat:2 }}</p>
+    </div>
+
+    <!-- Filtro por fechas -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6">
+        <form method="get" class="flex gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+                <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}" class="mt-1 p-2 border rounded-lg">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Fecha Fin</label>
+                <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}" class="mt-1 p-2 border rounded-lg">
+            </div>
+            <button type="submit" class="mt-6 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Filtrar</button>
+        </form>
+    </div>
+
+    <!-- Lista de movimientos -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 class="font-bold text-lg">Movimientos de Caja</h3>
+        <table class="w-full table-auto mt-4">
+            <thead>
+                <tr class="text-left">
+                    <th class="py-3 px-4">Fecha</th>
+                    <th class="py-3 px-4">Tipo</th>
+                    <th class="py-3 px-4">Monto</th>
+                    <th class="py-3 px-4">Descripción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movimiento in movimientos %}
+                <tr class="border-t hover:bg-gray-50">
+                    <td class="py-3 px-4">{{ movimiento.fecha }}</td>
+                    <td class="py-3 px-4">{{ movimiento.tipo_display }}</td>
+                    <td class="py-3 px-4">${{ movimiento.monto|floatformat:2 }}</td>
+                    <td class="py-3 px-4">{{ movimiento.descripcion }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="py-3 px-4 text-center">No hay movimientos registrados.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Formulario para agregar un movimiento -->
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="font-bold text-lg">Nuevo Movimiento</h3>
+        <form method="post" class="mt-4">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 mt-4">Agregar Movimiento</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

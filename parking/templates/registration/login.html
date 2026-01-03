@@ -1,0 +1,27 @@
+{% extends 'parking/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6">
+    <!-- Título del sistema -->
+    <h1 class="text-3xl font-bold text-center mb-4 text-blue-800">Parking System</h1>
+
+    
+    
+    <!-- Formulario -->
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        {{ form|crispy }}
+
+        <button type="submit" 
+                class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 focus:ring-2 focus:ring-blue-400 focus:outline-none">
+            Iniciar Sesión
+        </button>
+    </form>
+    
+    <!-- Enlace para contraseña olvidada -->
+    <div class="mt-4 text-center">
+        <a href="{% url 'password_reset' %}" class="text-sm text-blue-600 hover:underline">¿Olvidaste tu contraseña?</a>
+    </div>
+</div>
+{% endblock %}

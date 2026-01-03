@@ -1,0 +1,205 @@
+{% extends 'parking/base.html' %}
+{% load humanize %}
+
+{% block title %}Dashboard - SoluPark{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Resumen de operaciones{% endblock %}
+
+{% block content %}
+<div class="space-y-4 lg:space-y-6">
+    <!-- Tarjetas KPI -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
+        <div class="bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-200 p-4 lg:p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs lg:text-sm font-medium text-slate-500">Vehículos Activos</p>
+                    <p class="text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{{ stats.active_vehicles }}</p>
+                </div>
+                <div class="w-10 h-10 lg:w-12 lg:h-12 bg-primary-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-parking text-primary-600 text-lg lg:text-xl"></i>
+                </div>
+            </div>
+            <p class="text-[10px] lg:text-xs text-slate-500 mt-2 lg:mt-3">En el parqueadero ahora</p>
+        </div>
+        
+        <div class="bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-200 p-4 lg:p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs lg:text-sm font-medium text-slate-500">Vehículos (7 días)</p>
+                    <p class="text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{{ stats.daily.total_vehicles|default:0 }}</p>
+                </div>
+                <div class="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-car text-blue-600 text-lg lg:text-xl"></i>
+                </div>
+            </div>
+            <p class="text-[10px] lg:text-xs text-slate-500 mt-2 lg:mt-3">Servicios completados</p>
+        </div>
+        
+        <div class="bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-200 p-4 lg:p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs lg:text-sm font-medium text-slate-500">Ingresos (7 días)</p>
+                    <p class="text-xl lg:text-3xl font-bold text-emerald-600 mt-1">${{ stats.daily.total_revenue|default:0|floatformat:0|intcomma }}</p>
+                </div>
+                <div class="w-10 h-10 lg:w-12 lg:h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-dollar-sign text-emerald-600 text-lg lg:text-xl"></i>
+                </div>
+            </div>
+            <p class="text-[10px] lg:text-xs text-slate-500 mt-2 lg:mt-3">Total recaudado</p>
+        </div>
+        
+        <div class="bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-200 p-4 lg:p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs lg:text-sm font-medium text-slate-500">Contratos por Vencer</p>
+                    <p class="text-2xl lg:text-3xl font-bold {% if contracts_expiring %}text-amber-600{% else %}text-slate-900{% endif %} mt-1">{{ contracts_expiring|length|default:0 }}</p>
+                </div>
+                <div class="w-10 h-10 lg:w-12 lg:h-12 {% if contracts_expiring %}bg-amber-100{% else %}bg-slate-100{% endif %} rounded-xl flex items-center justify-center">
+                    <i class="fas fa-file-contract {% if contracts_expiring %}text-amber-600{% else %}text-slate-400{% endif %} text-lg lg:text-xl"></i>
+                </div>
+            </div>
+            <p class="text-[10px] lg:text-xs text-slate-500 mt-2 lg:mt-3">Próximos 5 días</p>
+        </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <a href="{% url 'vehicle-entry' %}" class="bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-xl lg:rounded-2xl p-4 lg:p-6 flex flex-col items-center justify-center gap-2 lg:gap-3 hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg shadow-primary-500/30">
+            <i class="fas fa-car-side text-2xl lg:text-3xl"></i>
+            <span class="font-medium text-sm lg:text-base">Entrada</span>
+        </a>
+        <a href="{% url 'vehicle-exit' %}" class="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-xl lg:rounded-2xl p-4 lg:p-6 flex flex-col items-center justify-center gap-2 lg:gap-3 hover:from-red-600 hover:to-red-700 transition-all shadow-lg shadow-red-500/30">
+            <i class="fas fa-sign-out-alt text-2xl lg:text-3xl"></i>
+            <span class="font-medium text-sm lg:text-base">Salida</span>
+        </a>
+        <a href="{% url 'third_party_list' %}" class="bg-gradient-to-br from-violet-500 to-violet-600 text-white rounded-xl lg:rounded-2xl p-4 lg:p-6 flex flex-col items-center justify-center gap-2 lg:gap-3 hover:from-violet-600 hover:to-violet-700 transition-all shadow-lg shadow-violet-500/30">
+            <i class="fas fa-users text-2xl lg:text-3xl"></i>
+            <span class="font-medium text-sm lg:text-base">Clientes</span>
+        </a>
+        <a href="{% url 'contract_list' %}" class="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-xl lg:rounded-2xl p-4 lg:p-6 flex flex-col items-center justify-center gap-2 lg:gap-3 hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg shadow-emerald-500/30">
+            <i class="fas fa-file-contract text-2xl lg:text-3xl"></i>
+            <span class="font-medium text-sm lg:text-base">Mensualidades</span>
+        </a>
+    </div>
+
+    <!-- Vehículos Activos -->
+    <div class="bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-4 lg:p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h3 class="text-base lg:text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-parking text-primary-500"></i>
+                Vehículos en el Parqueadero
+            </h3>
+            <button onclick="location.reload()" class="text-sm text-primary-600 hover:text-primary-700 font-medium self-end sm:self-auto">
+                <i class="fas fa-sync-alt mr-1"></i> Actualizar
+            </button>
+        </div>
+        
+        {% if stats.active_vehicles_list %}
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[600px]">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Placa</th>
+                        <th class="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase hidden sm:table-cell">Categoría</th>
+                        <th class="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Entrada</th>
+                        <th class="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Tiempo</th>
+                        <th class="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Tarifa</th>
+                        <th class="px-4 lg:px-6 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for vehicle in stats.active_vehicles_list %}
+                    <tr class="hover:bg-slate-50">
+                        <td class="px-4 lg:px-6 py-3 lg:py-4">
+                            <span class="font-bold text-slate-900 text-sm lg:text-base">{{ vehicle.placa }}</span>
+                            {% if vehicle.is_monthly_entry %}
+                            <span class="ml-1 lg:ml-2 px-1.5 lg:px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] lg:text-xs font-medium">Mensual</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 lg:px-6 py-3 lg:py-4 hidden sm:table-cell">
+                            <span class="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs lg:text-sm font-medium">
+                                {{ vehicle.category.name }}
+                            </span>
+                        </td>
+                        <td class="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm">{{ vehicle.entry_time|date:"d/m H:i" }}</td>
+                        <td class="px-4 lg:px-6 py-3 lg:py-4">
+                            {% with time_diff=vehicle.get_current_duration %}
+                            <span class="font-medium text-slate-900 text-sm">{{ time_diff.hours }}h {{ time_diff.minutes }}m</span>
+                            {% endwith %}
+                        </td>
+                        <td class="px-4 lg:px-6 py-3 lg:py-4">
+                            <span class="font-bold text-emerald-600 text-sm">${{ vehicle.calculate_current_fee|floatformat:0|intcomma }}</span>
+                        </td>
+                        <td class="px-4 lg:px-6 py-3 lg:py-4 text-right">
+                            <div class="flex items-center justify-end gap-1 lg:gap-2">
+                                <a href="{% url 'print-ticket' %}?ticket_id={{ vehicle.id }}" 
+                                   class="inline-flex items-center gap-1 px-2 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs lg:text-sm font-medium transition-colors"
+                                   title="Reimprimir ticket">
+                                    <i class="fas fa-print"></i>
+                                </a>
+                                <a href="{% url 'vehicle-exit' %}?placa={{ vehicle.placa }}" 
+                                   class="inline-flex items-center gap-1 px-2 lg:px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs lg:text-sm font-medium transition-colors">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <span class="hidden lg:inline">Salida</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-8 lg:p-12 text-center">
+            <div class="w-14 h-14 lg:w-16 lg:h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-parking text-xl lg:text-2xl text-slate-400"></i>
+            </div>
+            <h4 class="text-base lg:text-lg font-medium text-slate-900 mb-2">Sin vehículos activos</h4>
+            <p class="text-slate-500 text-sm">No hay vehículos en el parqueadero en este momento</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Por Categoría -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+                <i class="fas fa-chart-pie text-primary-500"></i>
+                Por Categoría (7 días)
+            </h3>
+            <div class="space-y-3">
+                {% for stat in stats.category %}
+                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <span class="font-medium text-slate-700">{{ stat.category__name }}</span>
+                    <div class="text-right">
+                        <span class="text-sm text-slate-500">{{ stat.count }} vehículos</span>
+                        <span class="block font-bold text-emerald-600">${{ stat.revenue|default:0|floatformat:0|intcomma }}</span>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-center text-slate-500 py-4">Sin datos</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Ingresos Diarios -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-4">
+                <i class="fas fa-calendar-day text-emerald-500"></i>
+                Ingresos Diarios
+            </h3>
+            <div class="space-y-3">
+                {% for stat in daily_stats %}
+                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <span class="font-medium text-slate-700">{{ stat.date }}</span>
+                    <span class="font-bold text-emerald-600">${{ stat.revenue|floatformat:0|intcomma }}</span>
+                </div>
+                {% empty %}
+                <p class="text-center text-slate-500 py-4">Sin datos</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

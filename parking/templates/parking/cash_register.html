@@ -1,0 +1,273 @@
+{% extends 'parking/base.html' %}
+{% load humanize %}
+
+{% block title %}Caja - SoluPark{% endblock %}
+{% block page_title %}Cuadre de Caja{% endblock %}
+{% block page_subtitle %}{{ start_date|date:"d/m/Y" }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 lg:space-y-5">
+    
+    {% if not is_vendedor %}
+    <!-- Filtros -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <form method="get" class="flex flex-wrap items-center gap-2">
+            <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}"
+                   class="px-2 lg:px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 w-[130px]">
+            <span class="text-slate-400 text-sm">a</span>
+            <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}"
+                   class="px-2 lg:px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 w-[130px]">
+            <button type="submit" class="px-3 py-2 bg-slate-800 text-white text-sm rounded-lg hover:bg-slate-700">
+                Filtrar
+            </button>
+        </form>
+        
+        <div class="flex gap-2">
+            <a href="{% url 'cash_register_excel' %}?date={{ start_date|date:'Y-m-d' }}" 
+               class="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-file-excel"></i><span class="hidden sm:inline ml-1">Excel</span>
+            </a>
+            <a href="{% url 'cash_register_pdf' %}?date={{ start_date|date:'Y-m-d' }}" 
+               class="px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
+                <i class="fas fa-file-pdf"></i><span class="hidden sm:inline ml-1">PDF</span>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        
+        <!-- Columna izquierda: Resumen por método de pago -->
+        <div class="lg:col-span-2 space-y-5">
+            
+            <!-- Ingresos por método de pago -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Ingresos del Día</h3>
+                </div>
+                <div class="p-5">
+                    {% if payment_summary %}
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-left text-xs text-slate-500 uppercase">
+                                <th class="pb-3">Método de Pago</th>
+                                <th class="pb-3 text-center">Operaciones</th>
+                                <th class="pb-3 text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for item in payment_summary %}
+                            <tr>
+                                <td class="py-3">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-lg flex items-center justify-center {% if item.is_cash %}bg-emerald-100 text-emerald-600{% else %}bg-slate-100 text-slate-500{% endif %}">
+                                            <i class="fas {{ item.icon|default:'fa-credit-card' }} text-sm"></i>
+                                        </div>
+                                        <span class="font-medium text-slate-700">{{ item.name }}</span>
+                                        {% if item.is_cash %}
+                                        <span class="text-xs text-emerald-600">(efectivo)</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="py-3 text-center text-slate-600">{{ item.count }}</td>
+                                <td class="py-3 text-right font-semibold text-slate-800">${{ item.total|floatformat:0|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="border-t-2 border-slate-200">
+                            <tr>
+                                <td class="pt-3 font-semibold text-slate-800">Total Ingresos</td>
+                                <td class="pt-3 text-center text-slate-600">{{ tickets|length|add:contract_payments|length }}</td>
+                                <td class="pt-3 text-right text-xl font-bold text-slate-900">${{ total_all|floatformat:0|intcomma }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-8">No hay ingresos registrados</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Detalle de operaciones -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="border-b border-slate-100">
+                    <nav class="flex">
+                        <button onclick="showTab('tickets')" id="tab-tickets" class="tab-btn flex-1 px-5 py-3 text-sm font-medium border-b-2 border-sky-500 text-sky-600">
+                            Parqueadero ({{ tickets|length }})
+                        </button>
+                        <button onclick="showTab('contracts')" id="tab-contracts" class="tab-btn flex-1 px-5 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">
+                            Mensualidades ({{ contract_payments|length }})
+                        </button>
+                    </nav>
+                </div>
+                
+                <div id="content-tickets" class="tab-content max-h-80 overflow-y-auto">
+                    {% if tickets %}
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 sticky top-0">
+                            <tr class="text-left text-xs text-slate-500 uppercase">
+                                <th class="px-4 py-2">Placa</th>
+                                <th class="px-4 py-2">Hora</th>
+                                <th class="px-4 py-2">Método</th>
+                                <th class="px-4 py-2 text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            {% for ticket in tickets %}
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-4 py-2 font-mono text-slate-800">{{ ticket.placa }}</td>
+                                <td class="px-4 py-2 text-slate-600">{{ ticket.exit_time|date:"H:i" }}</td>
+                                <td class="px-4 py-2 text-slate-600">{{ ticket.payment_method.name|default:"Efectivo" }}</td>
+                                <td class="px-4 py-2 text-right font-medium text-slate-800">${{ ticket.amount_paid|floatformat:0|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-8">Sin tickets</p>
+                    {% endif %}
+                </div>
+                
+                <div id="content-contracts" class="tab-content hidden max-h-80 overflow-y-auto">
+                    {% if contract_payments %}
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 sticky top-0">
+                            <tr class="text-left text-xs text-slate-500 uppercase">
+                                <th class="px-4 py-2">Vehículo</th>
+                                <th class="px-4 py-2">Cliente</th>
+                                <th class="px-4 py-2">Método</th>
+                                <th class="px-4 py-2 text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            {% for payment in contract_payments %}
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-4 py-2 font-mono text-slate-800">{{ payment.contract.vehicle.plate|default:"-" }}</td>
+                                <td class="px-4 py-2 text-slate-600">{{ payment.contract.third_party|default:"-"|truncatechars:20 }}</td>
+                                <td class="px-4 py-2 text-slate-600">{{ payment.payment_method.name|default:"-" }}</td>
+                                <td class="px-4 py-2 text-right font-medium text-slate-800">${{ payment.amount|floatformat:0|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-center text-slate-400 py-8">Sin pagos de mensualidades</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna derecha: Cuadre de caja -->
+        <div class="space-y-5">
+            
+            <!-- Cuadre de caja física -->
+            <div class="bg-white rounded-xl border border-slate-200">
+                <div class="px-5 py-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-800">Cuadre de Caja</h3>
+                    <p class="text-xs text-slate-400 mt-1">Solo dinero en efectivo</p>
+                </div>
+                <div class="p-5 space-y-4">
+                    
+                    <!-- Base -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-600">Base de caja</span>
+                        <span class="font-semibold text-slate-800">${{ caja.dinero_inicial|floatformat:0|intcomma }}</span>
+                    </div>
+                    
+                    <!-- Ingresos efectivo -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-600">+ Ingresos efectivo</span>
+                        <span class="font-semibold text-emerald-600">${{ total_cash|floatformat:0|intcomma }}</span>
+                    </div>
+                    
+                    <div class="border-t border-slate-200 pt-4">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-slate-700">Esperado en caja</span>
+                            <span class="text-xl font-bold text-slate-900">${{ dinero_esperado|floatformat:0|intcomma }}</span>
+                        </div>
+                    </div>
+
+                    {% if not caja.cuadre_realizado %}
+                    <!-- Formulario base -->
+                    <form method="post" class="pt-4 border-t border-slate-100">
+                        {% csrf_token %}
+                        <label class="block text-sm text-slate-600 mb-2">Establecer base de caja</label>
+                        <div class="flex gap-2">
+                            <input type="number" name="dinero_inicial" placeholder="0" min="0" value="{{ caja.dinero_inicial|floatformat:0 }}"
+                                   class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                            <button type="submit" name="set_dinero_inicial" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200">
+                                Guardar
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- Formulario cuadre -->
+                    <form method="post" class="pt-4 border-t border-slate-100">
+                        {% csrf_token %}
+                        <label class="block text-sm text-slate-600 mb-2">Dinero contado en caja</label>
+                        <input type="number" name="dinero_final" required min="0" placeholder="Ingrese el monto contado"
+                               class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm mb-3">
+                        <button type="submit" name="realizar_cuadre"
+                                class="w-full px-4 py-2 bg-sky-600 text-white rounded-lg text-sm hover:bg-sky-700">
+                            Realizar Cuadre
+                        </button>
+                    </form>
+                    {% else %}
+                    <!-- Resultado -->
+                    <div class="pt-4 border-t border-slate-100">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-slate-600">Dinero contado</span>
+                            <span class="font-semibold text-slate-800">${{ caja.dinero_final|floatformat:0|intcomma }}</span>
+                        </div>
+                        
+                        <div class="p-3 rounded-lg {% if diferencia == 0 %}bg-emerald-50{% elif diferencia > 0 %}bg-blue-50{% else %}bg-red-50{% endif %}">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm {% if diferencia == 0 %}text-emerald-700{% elif diferencia > 0 %}text-blue-700{% else %}text-red-700{% endif %}">
+                                    {% if diferencia == 0 %}Cuadre exacto{% elif diferencia > 0 %}Sobrante{% else %}Faltante{% endif %}
+                                </span>
+                                <span class="font-bold {% if diferencia == 0 %}text-emerald-700{% elif diferencia > 0 %}text-blue-700{% else %}text-red-700{% endif %}">
+                                    ${{ diferencia_abs|floatformat:0|intcomma }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Resumen rápido -->
+            <div class="bg-slate-800 rounded-xl p-5 text-white">
+                <h4 class="text-sm text-slate-400 mb-3">Resumen del día</h4>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-slate-300">Tickets</span>
+                        <span class="font-medium">{{ tickets|length }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-300">Mensualidades</span>
+                        <span class="font-medium">{{ contract_payments|length }}</span>
+                    </div>
+                    <div class="flex justify-between pt-2 border-t border-slate-700">
+                        <span class="text-slate-300">Total ventas</span>
+                        <span class="font-bold text-lg">${{ total_all|floatformat:0|intcomma }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('border-sky-500', 'text-sky-600');
+        el.classList.add('border-transparent', 'text-slate-500');
+    });
+    document.getElementById('content-' + tabName).classList.remove('hidden');
+    var tab = document.getElementById('tab-' + tabName);
+    tab.classList.remove('border-transparent', 'text-slate-500');
+    tab.classList.add('border-sky-500', 'text-sky-600');
+}
+</script>
+{% endblock %}

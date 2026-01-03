@@ -1,0 +1,108 @@
+{% extends 'superadmin/base.html' %}
+
+{% block title %}{% if tenant %}Editar{% else %}Nuevo{% endif %} Parqueadero{% endblock %}
+{% block page_title %}{% if tenant %}Editar Parqueadero{% else %}Nuevo Parqueadero{% endif %}{% endblock %}
+{% block page_subtitle %}{% if tenant %}Modificar {{ tenant.name }}{% else %}Registrar nuevo parqueadero{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-building text-violet-500"></i>
+                Información del Parqueadero
+            </h3>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Nombre *</label>
+                {{ form.name }}
+                {% if form.name.errors %}<p class="mt-1 text-sm text-red-600">{{ form.name.errors.0 }}</p>{% endif %}
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Razón Social</label>
+                    {{ form.business_name }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">NIT</label>
+                    {{ form.nit }}
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Dirección</label>
+                {{ form.address }}
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Teléfono</label>
+                    {{ form.phone }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Email</label>
+                    {{ form.email }}
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Ciudad</label>
+                    {{ form.city }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Estado</label>
+                    {{ form.status }}
+                </div>
+            </div>
+        </div>
+        
+        {% if not tenant %}
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-user-shield text-violet-500"></i>
+                Administrador del Parqueadero
+            </h3>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Nombre *</label>
+                    {{ form.admin_first_name }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Apellido *</label>
+                    {{ form.admin_last_name }}
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Email del Admin *</label>
+                {{ form.admin_email }}
+                {% if form.admin_email.errors %}<p class="mt-1 text-sm text-red-600">{{ form.admin_email.errors.0 }}</p>{% endif %}
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Contraseña *</label>
+                {{ form.admin_password }}
+                <p class="mt-1 text-xs text-slate-500">Mínimo 6 caracteres</p>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="flex gap-4">
+            <button type="submit" 
+                    class="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+                <i class="fas fa-save"></i>
+                {% if tenant %}Guardar Cambios{% else %}Crear Parqueadero{% endif %}
+            </button>
+            <a href="{% url 'superadmin:tenant_list' %}" 
+               class="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

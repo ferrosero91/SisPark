@@ -1,0 +1,39 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Eliminar Método de Pago - SoluPark{% endblock %}
+{% block page_title %}Eliminar Método de Pago{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="bg-red-50 border-b border-red-100 px-6 py-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-red-800">¿Eliminar este método de pago?</h3>
+                    <p class="text-sm text-red-600">Esta acción no se puede deshacer</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            <div class="bg-slate-50 rounded-xl p-4 mb-6">
+                <p class="text-lg font-semibold text-slate-800">{{ method.name }}</p>
+                <p class="text-sm text-slate-600">{{ method.get_payment_type_display }}</p>
+            </div>
+            
+            <form method="post" class="flex gap-3">
+                {% csrf_token %}
+                <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-xl transition-colors">
+                    <i class="fas fa-trash mr-2"></i> Sí, eliminar
+                </button>
+                <a href="{% url 'payment_method_list' %}" class="flex-1 text-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-xl transition-colors">
+                    Cancelar
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

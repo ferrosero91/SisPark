@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SuperAdmin{% endblock %} - SoluPark</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .sidebar-overlay { display: none; }
+        .sidebar-overlay.show { display: block; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <div class="min-h-screen">
+        <!-- Mobile Overlay -->
+        <div id="sidebarOverlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-30 lg:hidden" onclick="closeMobileSidebar()"></div>
+        
+        <!-- Sidebar -->
+        <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-slate-900 text-white z-40 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+            <div class="p-4 lg:p-6 border-b border-slate-700 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-shield-alt text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold">SoluPark</h1>
+                        <span class="text-xs text-violet-400 font-medium">SuperAdmin</span>
+                    </div>
+                </div>
+                <button onclick="closeMobileSidebar()" class="p-2 hover:bg-slate-800 rounded-lg lg:hidden">
+                    <i class="fas fa-times text-slate-400"></i>
+                </button>
+            </div>
+            
+            <nav class="p-4 space-y-1">
+                <a href="{% url 'superadmin:dashboard' %}" 
+                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if request.resolver_match.url_name == 'dashboard' %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
+                    <i class="fas fa-chart-pie w-5"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="{% url 'superadmin:tenant_list' %}" 
+                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if 'tenant' in request.resolver_match.url_name and 'subscription' not in request.resolver_match.url_name %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
+                    <i class="fas fa-building w-5"></i>
+                    <span>Parqueaderos</span>
+                </a>
+                <a href="{% url 'superadmin:subscription_plans' %}" 
+                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if request.resolver_match.url_name == 'subscription_plans' %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
+                    <i class="fas fa-tags w-5"></i>
+                    <span>Planes</span>
+                </a>
+                <a href="{% url 'superadmin:subscription_payments' %}" 
+                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if request.resolver_match.url_name == 'subscription_payments' %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
+                    <i class="fas fa-receipt w-5"></i>
+                    <span>Pagos</span>
+                </a>
+            </nav>
+            
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
+                <div class="bg-slate-800 rounded-xl p-3 lg:p-4">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-9 h-9 lg:w-10 lg:h-10 bg-violet-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                            {{ request.user.first_name.0|default:"S" }}{{ request.user.last_name.0|default:"A" }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-white text-sm truncate">{{ request.user.get_full_name|default:"SuperAdmin" }}</div>
+                            <div class="text-xs text-slate-400 truncate">{{ request.user.email }}</div>
+                        </div>
+                    </div>
+                    <form action="{% url 'logout' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Cerrar Sesión
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main -->
+        <main class="lg:ml-64 min-h-screen">
+            <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+                <div class="px-4 lg:px-8 py-4 flex items-center gap-4">
+                    <button onclick="openMobileSidebar()" class="p-2 -ml-2 hover:bg-slate-100 rounded-lg lg:hidden">
+                        <i class="fas fa-bars text-slate-600"></i>
+                    </button>
+                    <div class="flex-1 min-w-0">
+                        <h2 class="text-base lg:text-lg font-semibold text-slate-800 truncate">{% block page_title %}Dashboard{% endblock %}</h2>
+                        <p class="text-xs lg:text-sm text-slate-500 truncate">{% block page_subtitle %}{% endblock %}</p>
+                    </div>
+                </div>
+            </header>
+            
+            <div class="p-4 lg:p-8">
+                {% if messages %}
+                <div class="mb-6 space-y-3">
+                    {% for message in messages %}
+                    <div class="flex items-center gap-3 p-3 lg:p-4 rounded-xl text-sm {% if message.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200{% elif message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% else %}bg-sky-50 text-sky-800 border border-sky-200{% endif %}">
+                        <i class="fas {% if message.tags == 'success' %}fa-check-circle text-emerald-500{% elif message.tags == 'error' %}fa-exclamation-circle text-red-500{% else %}fa-info-circle text-sky-500{% endif %}"></i>
+                        <span>{{ message }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        function openMobileSidebar() {
+            document.getElementById('sidebar').classList.remove('-translate-x-full');
+            document.getElementById('sidebarOverlay').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeMobileSidebar() {
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+            document.getElementById('sidebarOverlay').classList.remove('show');
+            document.body.style.overflow = '';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket #{{ ticket.ticket_number }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            width: 80mm;
+            padding: 4mm;
+            background: white;
+        }
+        .ticket {
+            border: 2px dashed #333;
+            padding: 5mm;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px dashed #333;
+            padding-bottom: 4mm;
+            margin-bottom: 4mm;
+        }
+        .parking-name { font-size: 18px; font-weight: bold; }
+        .parking-address { font-size: 11px; margin-top: 2mm; color: #333; }
+        .parking-phone { font-size: 12px; margin-top: 1mm; font-weight: bold; }
+        .ticket-type {
+            background: #000;
+            color: white;
+            padding: 3mm 4mm;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            margin: 4mm 0;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding: 2mm 0;
+            border-bottom: 1px dotted #999;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .label { color: #555; }
+        .value { font-weight: bold; }
+        .plate {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            padding: 5mm 0;
+            border: 3px solid #000;
+            margin: 4mm 0;
+            background: #f5f5f5;
+        }
+        .barcode {
+            text-align: center;
+            margin: 5mm 0;
+            padding: 3mm 0;
+        }
+        .barcode img { 
+            width: 100%; 
+            height: 45mm;
+            object-fit: contain;
+        }
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #555;
+            margin-top: 4mm;
+            padding-top: 4mm;
+            border-top: 2px dashed #333;
+        }
+        .footer p { margin: 1mm 0; }
+        .brand { font-size: 9px; color: #999; margin-top: 3mm; }
+        .monthly-badge {
+            background: #10b981;
+            color: white;
+            padding: 3mm;
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            margin: 3mm 0;
+        }
+        @media print {
+            body { width: 80mm; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ticket">
+        <div class="header">
+            <div class="parking-name">{{ parking_lot.name|default:"Parqueadero" }}</div>
+            {% if parking_lot.address %}
+            <div class="parking-address">{{ parking_lot.address }}</div>
+            {% endif %}
+            {% if parking_lot.phone %}
+            <div class="parking-phone">Tel: {{ parking_lot.phone }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="ticket-type">{% if is_reprint %}REIMPRESIÓN{% else %}TICKET DE ENTRADA{% endif %}</div>
+        
+        <div class="plate">{{ ticket.placa }}</div>
+        
+        {% if ticket.is_monthly_entry %}
+        <div class="monthly-badge">★ CLIENTE MENSUAL ★</div>
+        {% endif %}
+        
+        <div class="info-row">
+            <span class="label">Ticket:</span>
+            <span class="value">{{ ticket.ticket_number }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Categoría:</span>
+            <span class="value">{{ ticket.category.name }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Entrada:</span>
+            <span class="value">{{ ticket.entry_time|date:"d/m/Y H:i" }}</span>
+        </div>
+        {% if ticket.marca %}
+        <div class="info-row">
+            <span class="label">Marca:</span>
+            <span class="value">{{ ticket.marca }}</span>
+        </div>
+        {% endif %}
+        {% if ticket.color %}
+        <div class="info-row">
+            <span class="label">Color:</span>
+            <span class="value">{{ ticket.color }}</span>
+        </div>
+        {% endif %}
+        {% if ticket.cascos %}
+        <div class="info-row">
+            <span class="label">Cascos:</span>
+            <span class="value">{{ ticket.cascos }}</span>
+        </div>
+        {% endif %}
+        
+        <div class="barcode">
+            <img src="{{ ticket.get_barcode_base64 }}" alt="Código de barras">
+        </div>
+        
+        <div class="footer">
+            <p><strong>Conserve este ticket</strong></p>
+            <p>No nos hacemos responsables por</p>
+            <p>objetos dejados en el vehículo</p>
+            <p style="margin-top:2mm;">{{ current_time|date:"d/m/Y H:i:s" }}</p>
+            <p class="brand">Powered by SoluPark</p>
+        </div>
+    </div>
+    
+    <div class="no-print" style="text-align:center; margin-top:20px;">
+        <button onclick="window.print()" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#0ea5e9; color:white; border:none; border-radius:8px;">
+            Imprimir
+        </button>
+        <button onclick="window.location.href='{% url 'dashboard' %}'" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#64748b; color:white; border:none; border-radius:8px; margin-left:10px;">
+            Volver
+        </button>
+    </div>
+    
+    <script>
+        {% if not is_reprint %}window.onload = function() { window.print(); };{% endif %}
+    </script>
+</body>
+</html>

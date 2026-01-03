@@ -1,0 +1,44 @@
+{% comment %}
+Template para renderizar el menú de navegación basado en permisos.
+Uso: {% load permission_tags %}{% render_menu %}
+{% endcomment %}
+
+{% for item in menu_items %}
+<li class="nav-item">
+    {% if item.children %}
+    {# Módulo con submódulos #}
+    <div class="nav-dropdown">
+        <a href="#" class="nav-link dropdown-toggle" data-toggle="collapse" data-target="#menu-{{ item.module.code }}">
+            {% if item.module.icon %}
+            <i class="{{ item.module.icon }}"></i>
+            {% endif %}
+            <span>{{ item.module.name }}</span>
+        </a>
+        <ul class="nav-dropdown-items collapse" id="menu-{{ item.module.code }}">
+            {% for child in item.children %}
+            <li class="nav-item">
+                <a href="{% if child.url_name %}{% url child.url_name %}{% else %}#{% endif %}" class="nav-link">
+                    {% if child.icon %}
+                    <i class="{{ child.icon }}"></i>
+                    {% endif %}
+                    <span>{{ child.name }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    {# Módulo sin submódulos #}
+    <a href="{% if item.module.url_name %}{% url item.module.url_name %}{% else %}#{% endif %}" class="nav-link">
+        {% if item.module.icon %}
+        <i class="{{ item.module.icon }}"></i>
+        {% endif %}
+        <span>{{ item.module.name }}</span>
+    </a>
+    {% endif %}
+</li>
+{% empty %}
+<li class="nav-item">
+    <span class="nav-link text-muted">No hay módulos disponibles</span>
+</li>
+{% endfor %}

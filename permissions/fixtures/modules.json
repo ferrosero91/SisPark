@@ -1,0 +1,128 @@
+[
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111101",
+        "fields": {
+            "code": "dashboard",
+            "name": "Dashboard",
+            "description": "Panel principal con estadísticas",
+            "icon": "fas fa-home",
+            "url_name": "dashboard",
+            "order": 1,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111102",
+        "fields": {
+            "code": "parking_entry",
+            "name": "Entrada de Vehículos",
+            "description": "Registrar entrada de vehículos",
+            "icon": "fas fa-sign-in-alt",
+            "url_name": "vehicle-entry",
+            "order": 2,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111103",
+        "fields": {
+            "code": "parking_exit",
+            "name": "Salida de Vehículos",
+            "description": "Registrar salida y cobro de vehículos",
+            "icon": "fas fa-sign-out-alt",
+            "url_name": "vehicle-exit",
+            "order": 3,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111104",
+        "fields": {
+            "code": "cash_register",
+            "name": "Caja",
+            "description": "Control de caja diario",
+            "icon": "fas fa-cash-register",
+            "url_name": "cash_register",
+            "order": 4,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111105",
+        "fields": {
+            "code": "monthly_contracts",
+            "name": "Mensualidades",
+            "description": "Gestión de contratos mensuales",
+            "icon": "fas fa-file-contract",
+            "url_name": "contract_list",
+            "order": 5,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111106",
+        "fields": {
+            "code": "third_parties",
+            "name": "Terceros",
+            "description": "Gestión de clientes",
+            "icon": "fas fa-users",
+            "url_name": "third_party_list",
+            "order": 6,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111107",
+        "fields": {
+            "code": "reports",
+            "name": "Reportes",
+            "description": "Reportes y estadísticas",
+            "icon": "fas fa-chart-bar",
+            "url_name": "reports",
+            "order": 7,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111108",
+        "fields": {
+            "code": "config",
+            "name": "Configuración",
+            "description": "Configuración del sistema",
+            "icon": "fas fa-cog",
+            "url_name": "config_dashboard",
+            "order": 8,
+            "is_active": true,
+            "parent": null
+        }
+    },
+    {
+        "model": "permissions.module",
+        "pk": "11111111-1111-1111-1111-111111111109",
+        "fields": {
+            "code": "categories",
+            "name": "Categorías",
+            "description": "Gestión de categorías de vehículos",
+            "icon": "fas fa-tags",
+            "url_name": "category-list",
+            "order": 9,
+            "is_active": true,
+            "parent": null
+        }
+    }
+]

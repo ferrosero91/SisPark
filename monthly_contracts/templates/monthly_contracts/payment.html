@@ -1,0 +1,201 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Registrar Pago - {{ contract.vehicle.plate }}{% endblock %}
+{% block page_title %}Registrar Pago{% endblock %}
+{% block page_subtitle %}{{ contract.vehicle.plate }} - {{ contract.third_party.full_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6" id="paymentContainer" data-rate="{{ contract.monthly_rate|stringformat:'d' }}">
+    <!-- Info del contrato -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-emerald-600 to-emerald-500 px-6 py-4">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                <i class="fas fa-file-contract"></i>
+                Información del Contrato
+            </h3>
+        </div>
+        
+        <div class="p-6 border-b border-slate-100">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-car text-slate-600 text-2xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-2xl font-bold text-slate-900">{{ contract.vehicle.plate }}</h3>
+                    <p class="text-slate-500">{{ contract.third_party.full_name }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-3 divide-x divide-slate-100">
+            <div class="p-4 text-center">
+                <p class="text-xs text-slate-500 mb-1">Tarifa Mensual</p>
+                <p class="text-xl font-bold text-slate-900">${{ contract.monthly_rate|floatformat:0 }}</p>
+            </div>
+            <div class="p-4 text-center">
+                <p class="text-xs text-slate-500 mb-1">Vence</p>
+                <p class="font-bold {% if contract.end_date < today %}text-red-600{% else %}text-slate-900{% endif %}">
+                    {{ contract.end_date|date:"d/m/Y" }}
+                </p>
+            </div>
+            <div class="p-4 text-center">
+                <p class="text-xs text-slate-500 mb-1">Estado</p>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-sm font-medium
+                    {% if contract.status == 'active' %}bg-emerald-100 text-emerald-700
+                    {% elif contract.status == 'expired' %}bg-red-100 text-red-700
+                    {% else %}bg-amber-100 text-amber-700{% endif %}">
+                    {{ contract.get_status_display }}
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Formulario de pago -->
+    <form method="post" id="paymentForm">
+        {% csrf_token %}
+        
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div class="p-6 border-b border-slate-100">
+                <h4 class="font-semibold text-slate-900 mb-4">Detalles del Pago</h4>
+                
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Meses a Pagar</label>
+                        {{ form.months_paid }}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Monto Total</label>
+                        {{ form.amount }}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-6 border-b border-slate-100">
+                <h4 class="font-semibold text-slate-900 mb-4">Método de Pago</h4>
+                <div class="space-y-2" id="paymentMethodsContainer">
+                    {% for method in payment_methods %}
+                    <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors payment-option" 
+                           onclick="selectMethod(this, '{{ method.id }}', '{{ method.payment_type }}')">
+                        <input type="radio" name="payment_method" value="{{ method.id }}" 
+                               data-type="{{ method.payment_type }}"
+                               class="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                               {% if forloop.first %}checked{% endif %}>
+                        <i class="fas {{ method.icon }} text-slate-600 w-5"></i>
+                        <span class="font-medium text-slate-700">{{ method.name }}</span>
+                    </label>
+                    {% empty %}
+                    <p class="text-sm text-slate-500">No hay métodos de pago configurados</p>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Sección de efectivo -->
+            <div id="cashSection" class="p-6 border-b border-slate-100" style="display: none;">
+                <label class="block text-sm font-medium text-slate-700 mb-2">Monto Recibido</label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-medium">$</span>
+                    <input type="number" name="amount_received" id="amountReceived" 
+                           class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-lg"
+                           value="{{ contract.monthly_rate|stringformat:'d' }}" min="0" oninput="calcChange()">
+                </div>
+                <div id="changeDisplay" class="mt-3 p-3 bg-emerald-100 rounded-xl" style="display: none;">
+                    <div class="flex items-center justify-between">
+                        <span class="text-emerald-700 font-medium">Cambio:</span>
+                        <span class="text-xl font-bold text-emerald-700" id="changeAmount">$0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Referencia (para otros métodos) -->
+            <div id="referenceSection" class="p-6 border-b border-slate-100" style="display: none;">
+                <label class="block text-sm font-medium text-slate-700 mb-2">Referencia / Número de Transacción</label>
+                {{ form.reference }}
+            </div>
+            
+            <!-- Notas -->
+            <div class="p-6 border-b border-slate-100">
+                <label class="block text-sm font-medium text-slate-700 mb-2">Notas (opcional)</label>
+                {{ form.notes }}
+            </div>
+            
+            <div class="p-6">
+                <div class="flex gap-3">
+                    <a href="{% url 'contract_detail' contract.pk %}" 
+                       class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-arrow-left"></i>
+                        Cancelar
+                    </a>
+                    <button type="submit" 
+                            class="flex-1 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold py-4 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25">
+                        <i class="fas fa-check-circle"></i>
+                        Confirmar Pago
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+var monthlyRate = parseFloat(document.getElementById('paymentContainer').dataset.rate) || 0;
+var currentAmount = monthlyRate;
+
+function selectMethod(label, methodId, paymentType) {
+    var isCash = (paymentType === 'cash');
+    
+    // Actualizar estilos
+    var allOptions = document.querySelectorAll('.payment-option');
+    for (var i = 0; i < allOptions.length; i++) {
+        allOptions[i].className = 'flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors payment-option';
+    }
+    label.className = 'flex items-center gap-3 p-3 border border-emerald-500 bg-emerald-50 rounded-xl cursor-pointer transition-colors payment-option';
+    
+    // Mostrar/ocultar secciones
+    var cashSection = document.getElementById('cashSection');
+    var referenceSection = document.getElementById('referenceSection');
+    
+    if (isCash) {
+        cashSection.style.display = 'block';
+        referenceSection.style.display = 'none';
+        document.getElementById('amountReceived').value = currentAmount;
+        calcChange();
+    } else {
+        cashSection.style.display = 'none';
+        referenceSection.style.display = 'block';
+    }
+}
+
+function calcChange() {
+    var received = parseFloat(document.getElementById('amountReceived').value) || 0;
+    var change = received - currentAmount;
+    
+    var changeDisplay = document.getElementById('changeDisplay');
+    if (change > 0) {
+        document.getElementById('changeAmount').textContent = '$' + change.toLocaleString('es-CO');
+        changeDisplay.style.display = 'block';
+    } else {
+        changeDisplay.style.display = 'none';
+    }
+}
+
+// Actualizar monto cuando cambian los meses
+document.getElementById('id_months_paid').addEventListener('input', function() {
+    var months = parseInt(this.value) || 1;
+    currentAmount = monthlyRate * months;
+    document.getElementById('id_amount').value = currentAmount;
+    document.getElementById('amountReceived').value = currentAmount;
+    calcChange();
+});
+
+// Inicializar
+window.onload = function() {
+    var firstLabel = document.querySelector('.payment-option');
+    if (firstLabel) {
+        var radio = firstLabel.querySelector('input[type="radio"]');
+        if (radio) {
+            selectMethod(firstLabel, radio.value, radio.dataset.type);
+        }
+    }
+};
+</script>
+{% endblock %}

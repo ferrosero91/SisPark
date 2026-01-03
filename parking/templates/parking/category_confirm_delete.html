@@ -1,0 +1,47 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Eliminar Categoría - SoluPark{% endblock %}
+{% block page_title %}Eliminar Categoría{% endblock %}
+{% block page_subtitle %}Confirmar eliminación{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="p-8 text-center">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+            </div>
+            
+            <h3 class="text-xl font-semibold text-slate-900 mb-2">¿Eliminar categoría?</h3>
+            <p class="text-slate-500 mb-6">
+                Estás a punto de eliminar la categoría <strong class="text-slate-900">{{ object.name }}</strong>. 
+                Esta acción no se puede deshacer.
+            </p>
+            
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-left">
+                <div class="flex items-start gap-3">
+                    <i class="fas fa-info-circle text-amber-500 mt-0.5"></i>
+                    <p class="text-sm text-amber-700">
+                        Si hay tickets asociados a esta categoría, no podrás eliminarla.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="px-8 pb-8 flex gap-4">
+            <form method="post" class="flex-1">
+                {% csrf_token %}
+                <button type="submit" 
+                        class="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <i class="fas fa-trash"></i>
+                    Sí, eliminar
+                </button>
+            </form>
+            <a href="{% url 'category-list' %}" 
+               class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-xl transition-colors text-center">
+                Cancelar
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

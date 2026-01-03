@@ -1,0 +1,101 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}{{ title }} - SoluPark{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if third_party %}Editar información del cliente{% else %}Registrar nuevo cliente{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-user text-primary-500"></i>
+                Información Personal
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Tipo de Documento</label>
+                    {{ form.document_type }}
+                    {% if form.document_type.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.document_type.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Número de Documento</label>
+                    {{ form.document_number }}
+                    {% if form.document_number.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.document_number.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nombres</label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.first_name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Apellidos</label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ form.last_name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-address-book text-primary-500"></i>
+                Información de Contacto
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    {{ form.email }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+                    {{ form.phone }}
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Dirección</label>
+                {{ form.address }}
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Notas</label>
+                {{ form.notes }}
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="is_active" id="is_active" 
+                       {% if form.instance.is_active or not form.instance.pk %}checked{% endif %}
+                       class="rounded border-slate-300 text-primary-600 focus:ring-primary-500">
+                <label for="is_active" class="text-sm text-slate-700">Cliente activo</label>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <button type="submit" 
+                    class="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-primary-500/30">
+                <i class="fas fa-save"></i>
+                {% if third_party %}Guardar Cambios{% else %}Crear Cliente{% endif %}
+            </button>
+            <a href="{% url 'third_party_list' %}" 
+               class="inline-flex items-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

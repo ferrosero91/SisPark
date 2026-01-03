@@ -1,0 +1,192 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}Salida de Vehículo - SoluPark{% endblock %}
+{% block page_title %}Salida de Vehículo{% endblock %}
+{% block page_subtitle %}Buscar vehículo para dar salida{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Búsqueda -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-red-600 to-red-500 px-4 lg:px-6 py-4">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                <i class="fas fa-search"></i>
+                Buscar Vehículo
+            </h3>
+        </div>
+        
+        <div class="p-4 lg:p-6">
+            <div class="relative">
+                <input type="text" id="searchPlate" 
+                       class="w-full px-4 py-3 lg:py-4 pl-12 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 uppercase font-mono text-lg lg:text-xl tracking-wider"
+                       placeholder="Ingrese la placa" value="{{ placa }}" autofocus>
+                <i class="fas fa-car absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+            </div>
+            <button onclick="searchVehicle()" 
+                    class="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-white font-medium py-3 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+                <i class="fas fa-search"></i>
+                Buscar
+            </button>
+        </div>
+    </div>
+    
+    <!-- Resultado del vehículo encontrado -->
+    <div id="vehicleResult" class="hidden">
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div class="p-4 lg:p-6 border-b border-slate-100">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 lg:w-14 lg:h-14 bg-slate-100 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-car text-slate-600 text-xl lg:text-2xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-xl lg:text-2xl font-bold text-slate-900" id="resultPlaca"></h3>
+                            <p class="text-slate-500 text-sm lg:text-base" id="resultEntry"></p>
+                            <p class="text-sm text-slate-400 hidden" id="resultThirdParty"></p>
+                        </div>
+                    </div>
+                    <div id="monthlyBadge" class="hidden px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium self-start sm:self-center">
+                        <i class="fas fa-star mr-1"></i> <span id="badgeText">Mensualidad</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="rateInfo" class="hidden px-4 lg:px-6 py-3 bg-blue-50 border-b border-blue-100">
+                <div class="flex items-center gap-2 text-blue-700">
+                    <i class="fas fa-info-circle"></i>
+                    <span id="rateMessage" class="text-sm font-medium"></span>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 divide-x divide-slate-100">
+                <div class="p-4 lg:p-6 text-center">
+                    <p class="text-xs lg:text-sm text-slate-500 mb-1">Tiempo</p>
+                    <p class="text-lg lg:text-2xl font-bold text-slate-900" id="resultDuration"></p>
+                </div>
+                <div class="p-4 lg:p-6 text-center">
+                    <p class="text-xs lg:text-sm text-slate-500 mb-1">Total a Pagar</p>
+                    <p class="text-xl lg:text-3xl font-bold text-emerald-600" id="resultAmount"></p>
+                    <p class="text-sm text-slate-400 line-through hidden" id="originalAmount"></p>
+                </div>
+            </div>
+            
+            <div class="p-4 lg:p-6">
+                <button onclick="goToPayment()" 
+                        class="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold py-3 lg:py-4 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25">
+                    <i class="fas fa-cash-register"></i>
+                    Proceder al Cobro
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Error -->
+    <div id="vehicleError" class="hidden bg-red-50 border border-red-200 rounded-2xl p-4 lg:p-6">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-exclamation-circle text-red-500 text-xl"></i>
+            </div>
+            <div>
+                <h4 class="font-semibold text-red-800">Vehículo no encontrado</h4>
+                <p class="text-sm text-red-600">No hay ningún vehículo activo con esa placa</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentTicketId = null;
+
+function searchVehicle() {
+    const placa = document.getElementById('searchPlate').value.trim().toUpperCase();
+    if (!placa) return;
+    
+    document.getElementById('vehicleResult').classList.add('hidden');
+    document.getElementById('vehicleError').classList.add('hidden');
+    
+    fetch('{% url "vehicle-exit" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: 'identifier=' + encodeURIComponent(placa)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            document.getElementById('vehicleError').classList.remove('hidden');
+        } else {
+            currentTicketId = data.ticket_id;
+            
+            document.getElementById('resultPlaca').textContent = data.placa;
+            document.getElementById('resultEntry').textContent = 'Entrada: ' + data.entry_time;
+            document.getElementById('resultDuration').textContent = data.duration;
+            document.getElementById('resultAmount').textContent = '$' + data.amount.toLocaleString('es-CO');
+            
+            const thirdPartyEl = document.getElementById('resultThirdParty');
+            if (data.third_party) {
+                thirdPartyEl.textContent = data.third_party;
+                thirdPartyEl.classList.remove('hidden');
+            } else {
+                thirdPartyEl.classList.add('hidden');
+            }
+            
+            const originalAmountEl = document.getElementById('originalAmount');
+            if (data.discount && data.discount > 0) {
+                originalAmountEl.textContent = '$' + data.original_amount.toLocaleString('es-CO');
+                originalAmountEl.classList.remove('hidden');
+            } else {
+                originalAmountEl.classList.add('hidden');
+            }
+            
+            const badge = document.getElementById('monthlyBadge');
+            const badgeText = document.getElementById('badgeText');
+            if (data.is_monthly || data.rate_type === 'contract') {
+                badge.classList.remove('hidden');
+                badge.className = 'px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium self-start sm:self-center';
+                badgeText.textContent = data.days_remaining > 0 ? 'Contrato (' + data.days_remaining + ' días)' : 'Mensualidad';
+            } else if (data.rate_type === 'special') {
+                badge.classList.remove('hidden');
+                badge.className = 'px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium self-start sm:self-center';
+                badgeText.textContent = 'Tarifa Especial';
+            } else {
+                badge.classList.add('hidden');
+            }
+            
+            const rateInfo = document.getElementById('rateInfo');
+            const rateMessage = document.getElementById('rateMessage');
+            if (data.rate_message && data.rate_type !== 'regular') {
+                rateMessage.textContent = data.rate_message;
+                rateInfo.classList.remove('hidden');
+            } else {
+                rateInfo.classList.add('hidden');
+            }
+            
+            document.getElementById('vehicleResult').classList.remove('hidden');
+        }
+    })
+    .catch(function() {
+        document.getElementById('vehicleError').classList.remove('hidden');
+    });
+}
+
+function goToPayment() {
+    if (currentTicketId) {
+        window.location.href = '{% url "vehicle-payment" %}?ticket_id=' + currentTicketId;
+    }
+}
+
+document.getElementById('searchPlate').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        searchVehicle();
+    }
+});
+
+{% if placa %}
+document.addEventListener('DOMContentLoaded', searchVehicle);
+{% endif %}
+</script>
+{% endblock %}

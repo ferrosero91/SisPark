@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuenta Suspendida - SoluPark</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+    <div class="max-w-md w-full">
+        <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-pause-circle text-amber-500 text-4xl"></i>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-slate-900 mb-2">Cuenta Suspendida</h1>
+            <p class="text-slate-500 mb-6">
+                El acceso a <strong class="text-slate-700">{{ tenant.name }}</strong> ha sido temporalmente suspendido.
+            </p>
+            
+            {% if reason %}
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-left">
+                <p class="text-sm text-amber-700">
+                    <strong>Motivo:</strong> {{ reason }}
+                </p>
+            </div>
+            {% endif %}
+            
+            <div class="bg-slate-50 rounded-xl p-4 mb-6">
+                <p class="text-sm text-slate-600">
+                    Para más información, contacta al soporte:
+                </p>
+                <a href="mailto:{{ contact_email }}" class="text-sky-600 hover:text-sky-700 font-medium">
+                    {{ contact_email }}
+                </a>
+            </div>
+            
+            <form action="{% url 'logout' %}" method="post">
+                {% csrf_token %}
+                <button type="submit" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors">
+                    Cerrar Sesión
+                </button>
+            </form>
+        </div>
+        
+        <p class="text-center text-slate-400 text-sm mt-6">
+            © 2025 SoluPark
+        </p>
+    </div>
+</body>
+</html>

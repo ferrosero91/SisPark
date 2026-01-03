@@ -1,0 +1,387 @@
+# Implementation Plan: Arquitectura Multitenant SoluPark
+
+## Overview
+
+Este plan implementa la transformación de SoluPark en una plataforma multitenant completa. Las tareas están organizadas en fases incrementales, comenzando con la infraestructura base y progresando hacia las funcionalidades de negocio.
+
+## Tasks
+
+- [x] 1. Configuración de seguridad y entorno
+  - [x] 1.1 Crear archivo .env con variables de entorno
+    - Mover SECRET_KEY, credenciales de BD, configuraciones sensibles
+    - Crear .env.example como plantilla
+    - _Requirements: 3.1, 3.2_
+  - [x] 1.2 Actualizar settings.py para usar python-decouple
+    - Cargar todas las credenciales desde variables de entorno
+    - Configurar diferentes entornos (dev, staging, prod)
+    - _Requirements: 3.1, 3.2_
+  - [x] 1.3 Corregir middleware duplicado de WhiteNoise
+    - Eliminar entrada duplicada en MIDDLEWARE
+    - _Requirements: 3.9_
+  - [x] 1.4 Configurar headers de seguridad
+    - Agregar django-csp para Content Security Policy
+    - Configurar X-Frame-Options, X-Content-Type-Options
+    - _Requirements: 3.5, 3.9_
+
+- [ ] 2. Checkpoint - Verificar configuración de seguridad
+  - Ejecutar `python manage.py check --deploy`
+  - Verificar que no hay credenciales hardcodeadas
+
+- [x] 3. Crear app `tenants` - Infraestructura multitenant
+  - [x] 3.1 Crear app tenants con modelo Tenant
+    - Implementar modelo Tenant con campos: id, name, slug, business_name, nit, phone, address, email, status, is_active, settings
+    - Agregar método is_accessible()
+    - _Requirements: 1.1, 2.1, 2.3_
+  - [x] 3.2 Implementar TenantManager y TenantModel base
+    - Crear manager con filtro automático por tenant
+    - Crear modelo abstracto TenantModel
+    - Implementar método all_tenants() para superadmin
+    - _Requirements: 1.4_
+  - [x] 3.3 Implementar contexto de tenant (thread local)
+    - Crear funciones get_current_tenant, set_current_tenant, clear_current_tenant
+    - Implementar context manager tenant_context
+    - _Requirements: 1.2_
+  - [x] 3.4 Implementar TenantMiddleware
+    - Extraer tenant de subdominio
+    - Validar que tenant esté activo
+    - Establecer contexto en request
+    - Renderizar página de suspensión si aplica
+    - _Requirements: 1.2, 1.5, 2.4_
+  - [ ]* 3.5 Write property test for tenant isolation
+    - **Property 1: Tenant Data Isolation**
+    - **Validates: Requirements 1.1, 1.3, 1.4**
+
+- [x] 4. Crear app `users` - Sistema de usuarios extendido
+  - [x] 4.1 Crear modelo User extendido
+    - Heredar de AbstractUser
+    - Agregar campos: tenant, is_superadmin, is_tenant_admin, phone, avatar, last_login_ip, failed_login_attempts, locked_until
+    - Implementar métodos is_locked(), record_failed_login(), reset_failed_logins()
+    - _Requirements: 6.1, 3.8_
+  - [x] 4.2 Crear UserManager personalizado
+    - Filtrar usuarios por tenant actual
+    - Método para crear usuario de tenant
+    - _Requirements: 6.1_
+  - [x] 4.3 Implementar backend de autenticación custom
+    - Verificar bloqueo de cuenta
+    - Verificar estado del tenant
+    - Registrar intentos fallidos
+    - _Requirements: 3.3, 3.4, 3.8_
+  - [x] 4.4 Crear admin.py para User
+    - _Requirements: 6.1_
+  - [ ]* 4.5 Write property test for authentication rate limiting
+    - **Property 5: Authentication Rate Limiting**
+    - **Validates: Requirements 3.3, 3.8**
+
+- [ ] 5. Checkpoint - Verificar infraestructura base
+  - Ejecutar migraciones
+  - Crear tenant de prueba
+  - Verificar aislamiento básico
+
+- [x] 6. Crear app `permissions` - Control de acceso por módulos
+  - [x] 6.1 Crear modelos Module, Role, UserModulePermission
+    - Module: code, name, description, icon, url_name, order, is_active, parent
+    - Role: tenant, name, description, is_default, modules (M2M)
+    - UserModulePermission: user, module, can_view, can_create, can_edit, can_delete
+    - _Requirements: 6.2, 6.6, 6.7_
+  - [x] 6.2 Implementar PermissionService
+    - get_user_modules() con caché
+    - has_module_access()
+    - invalidate_user_cache()
+    - _Requirements: 6.3, 6.4_
+  - [x] 6.3 Crear decoradores de permisos
+    - @module_required(module_code)
+    - @superadmin_required
+    - @tenant_admin_required
+    - _Requirements: 6.4, 6.5_
+  - [x] 6.4 Crear template tag para menú dinámico
+    - Filtrar módulos según permisos del usuario
+    - _Requirements: 6.3_
+  - [ ]* 6.5 Write property test for module access control
+    - **Property 10: Module Access Control Enforcement**
+    - **Validates: Requirements 6.3, 6.4, 6.5**
+
+- [x] 7. Crear app `audit` - Sistema de auditoría
+  - [x] 7.1 Crear modelo AuditLog
+    - Campos: tenant, user, action, content_type, object_id, object_repr, changes, ip_address, user_agent, timestamp
+    - Índices para búsqueda eficiente
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [x] 7.2 Implementar AuditService
+    - Método log() para registrar eventos
+    - Método log_model_change() para cambios en modelos
+    - Extracción de IP del cliente
+    - _Requirements: 10.1, 10.2, 10.3_
+  - [x] 7.3 Crear signals para auditoría automática
+    - post_save, post_delete en modelos críticos
+    - Capturar valores anteriores en pre_save
+    - _Requirements: 10.1_
+  - [ ]* 7.4 Write property test for audit completeness
+    - **Property 6: Audit Log Completeness**
+    - **Validates: Requirements 10.1, 10.2, 10.3**
+
+- [ ] 8. Checkpoint - Verificar sistema de permisos y auditoría
+  - Crear módulos base en BD
+  - Crear roles de prueba
+  - Verificar logs de auditoría
+
+- [ ] 9. Panel de SuperAdmin
+  - [ ] 9.1 Crear vistas de dashboard superadmin
+    - Estadísticas globales de todos los tenants
+    - Métricas de uso por tenant
+    - _Requirements: 2.8, 2.11_
+  - [ ] 9.2 Crear CRUD de tenants
+    - Listar todos los parqueaderos
+    - Crear nuevo parqueadero con admin automático
+    - Editar información de parqueadero
+    - _Requirements: 2.1, 2.2, 2.9_
+  - [ ] 9.3 Implementar activar/desactivar tenant
+    - Toggle de estado con confirmación
+    - Mostrar estado de pago/suscripción
+    - _Requirements: 2.3, 2.4, 2.13_
+  - [ ] 9.4 Implementar eliminar tenant
+    - Confirmación con nombre del tenant
+    - Eliminación en cascada de todos los datos
+    - _Requirements: 2.5, 2.6_
+  - [ ] 9.5 Implementar cambio de contraseña de admin
+    - Formulario para cambiar contraseña de cualquier admin
+    - _Requirements: 2.7_
+  - [ ] 9.6 Implementar modo impersonar
+    - Acceder como admin de un tenant específico
+    - Indicador visual de modo impersonación
+    - _Requirements: 2.10_
+  - [ ]* 9.7 Write property test for cascade deletion
+    - **Property 4: Cascade Deletion Completeness**
+    - **Validates: Requirements 2.5, 2.6**
+
+- [ ] 10. Checkpoint - Verificar panel superadmin
+  - Crear/editar/eliminar tenant de prueba
+  - Verificar eliminación en cascada
+  - Probar impersonación
+
+- [x] 11. Crear app `third_parties` - Gestión de terceros
+  - [x] 11.1 Crear modelos ThirdParty y ThirdPartyVehicle
+    - ThirdParty: document_type, document_number, first_name, last_name, email, phone, address, is_active, notes
+    - ThirdPartyVehicle: third_party, plate, brand, color, vehicle_type, is_primary
+    - Constraint de unicidad por tenant
+    - _Requirements: 4.1, 4.2, 4.3_
+  - [ ] 11.2 Crear vistas CRUD de terceros
+    - Listado con búsqueda y filtros
+    - Formulario de creación/edición
+    - Vista de detalle con vehículos y historial
+    - _Requirements: 4.1, 4.4, 4.5_
+  - [ ] 11.3 Implementar búsqueda de terceros
+    - Búsqueda por nombre, documento, placa
+    - Autocompletado en formulario de entrada
+    - _Requirements: 4.5, 4.6_
+  - [ ] 11.4 Implementar exportación a Excel/CSV
+    - Exportar listado filtrado
+    - _Requirements: 4.7_
+  - [ ]* 11.5 Write property test for document uniqueness
+    - **Property 7: Document Uniqueness Per Tenant**
+    - **Validates: Requirements 4.2**
+
+- [x] 12. Crear app `monthly_contracts` - Gestión de mensualidades
+  - [x] 12.1 Crear modelos MonthlyContract y ContractPayment
+    - MonthlyContract: third_party, vehicle, category, start_date, end_date, monthly_rate, status, is_active
+    - ContractPayment: contract, amount, payment_date, payment_method, reference, notes
+    - Método calculate_status(), is_valid(), renew()
+    - _Requirements: 5.1, 5.2, 5.3, 5.8, 5.9_
+  - [ ] 12.2 Crear vistas CRUD de contratos
+    - Listado con filtros por estado
+    - Formulario de creación/edición
+    - Vista de detalle con historial de pagos
+    - _Requirements: 5.1, 5.2_
+  - [ ] 12.3 Implementar alertas de vencimiento
+    - Destacar contratos por vencer (5 días)
+    - Notificación en dashboard
+    - _Requirements: 5.4_
+  - [ ] 12.4 Implementar renovación de contratos
+    - Botón de renovar con selección de meses
+    - Registro de pago automático
+    - _Requirements: 5.8_
+  - [ ] 12.5 Crear reporte de contratos por vencer
+    - Listado de contratos próximos a vencer
+    - Exportación a Excel
+    - _Requirements: 5.7_
+  - [ ]* 12.6 Write property test for monthly contract fee
+    - **Property 8: Monthly Contract Fee Override**
+    - **Property 9: Expired Contract Normal Charging**
+    - **Validates: Requirements 5.5, 5.6**
+
+- [ ] 13. Checkpoint - Verificar terceros y mensualidades
+  - Crear tercero con vehículos
+  - Crear contrato mensual
+  - Verificar cálculo de estados
+
+- [ ] 14. Actualizar app `parking` para multitenant
+  - [ ] 14.1 Migrar modelos existentes a TenantModel
+    - VehicleCategory: agregar tenant, actualizar constraints
+    - ParkingTicket: agregar tenant, third_party, monthly_contract, ticket_number
+    - Crear migraciones de datos
+    - _Requirements: 1.1_
+  - [ ] 14.2 Actualizar lógica de entrada de vehículos
+    - Detectar tercero por placa
+    - Detectar contrato mensual vigente
+    - Marcar entrada como mensualidad si aplica
+    - _Requirements: 4.6, 5.5, 9.3_
+  - [ ] 14.3 Actualizar lógica de salida de vehículos
+    - Calcular tarifa considerando mensualidad
+    - Alertar si mensualidad vencida
+    - _Requirements: 5.5, 5.6_
+  - [ ] 14.4 Actualizar generación de tickets
+    - Número de ticket único por tenant
+    - Código de barras con identificador de tenant
+    - _Requirements: 9.1, 9.2_
+  - [ ]* 14.5 Write property test for cross-tenant access
+    - **Property 2: Cross-Tenant Access Denial**
+    - **Validates: Requirements 1.6, 2.4**
+
+- [ ] 15. Actualizar módulo de caja
+  - [ ] 15.1 Migrar modelo Caja a TenantModel
+    - Agregar tenant
+    - Actualizar constraints
+    - _Requirements: 1.1_
+  - [ ] 15.2 Actualizar vista de cuadre de caja
+    - Filtrar por tenant actual
+    - Mejorar UX del formulario
+    - _Requirements: 7.5_
+  - [ ] 15.3 Agregar movimientos de caja
+    - Modelo CashMovement para ingresos/egresos manuales
+    - Vista para registrar movimientos
+    - _Requirements: 7.5_
+
+- [ ] 16. Checkpoint - Verificar flujo completo de parking
+  - Registrar entrada de vehículo normal
+  - Registrar entrada con mensualidad
+  - Registrar salida y cobro
+  - Verificar cuadre de caja
+
+- [ ] 17. Mejora de reportes
+  - [ ] 17.1 Crear ReportService centralizado
+    - Métodos para cada tipo de reporte
+    - Soporte para filtros de fecha
+    - _Requirements: 7.1, 7.8_
+  - [ ] 17.2 Implementar reporte de ingresos
+    - Por período con filtros
+    - Desglose por categoría
+    - Comparación con período anterior
+    - _Requirements: 7.1, 7.8_
+  - [ ] 17.3 Implementar reporte de ocupación
+    - Ocupación por hora del día
+    - Gráfico de calor
+    - _Requirements: 7.2_
+  - [ ] 17.4 Implementar reporte de vehículos frecuentes
+    - Top 10 vehículos por visitas
+    - Total gastado por vehículo
+    - _Requirements: 7.3_
+  - [ ] 17.5 Implementar reporte de mensualidades
+    - Contratos activos y por vencer
+    - Ingresos por mensualidades
+    - _Requirements: 7.4_
+  - [ ] 17.6 Implementar exportación a PDF y Excel
+    - Usar reportlab para PDF
+    - Usar openpyxl para Excel
+    - _Requirements: 7.6_
+  - [ ] 17.7 Implementar gráficos interactivos
+    - Chart.js para visualizaciones
+    - Métricas calculadas
+    - _Requirements: 7.7, 7.9_
+
+- [ ] 18. Checkpoint - Verificar reportes
+  - Generar cada tipo de reporte
+  - Exportar a PDF y Excel
+  - Verificar gráficos
+
+- [ ] 19. Rediseño de interfaz de usuario
+  - [ ] 19.1 Crear sistema de diseño base
+    - Definir paleta de colores
+    - Definir tipografía y espaciado
+    - Crear variables CSS custom
+    - _Requirements: 8.1, 8.5_
+  - [ ] 19.2 Rediseñar template base
+    - Sidebar responsive mejorado
+    - Header con breadcrumbs
+    - Footer actualizado
+    - _Requirements: 8.2, 8.7_
+  - [ ] 19.3 Crear componentes reutilizables
+    - Cards, tablas, formularios, botones
+    - Modales y alertas
+    - Estados de carga
+    - _Requirements: 8.4, 8.8_
+  - [ ] 19.4 Rediseñar dashboard
+    - KPIs con diseño único
+    - Gráficos integrados
+    - Lista de vehículos activos mejorada
+    - _Requirements: 8.9_
+  - [ ] 19.5 Rediseñar formularios de entrada/salida
+    - Flujo optimizado
+    - Feedback visual inmediato
+    - Atajos de teclado
+    - _Requirements: 8.4, 9.1, 9.6_
+  - [ ] 19.6 Rediseñar tickets de impresión
+    - Diseño profesional
+    - Información clara
+    - _Requirements: 8.5_
+  - [ ] 19.7 Implementar modo oscuro
+    - Toggle en header
+    - Persistir preferencia
+    - _Requirements: 8.6_
+  - [ ] 19.8 Agregar animaciones sutiles
+    - Transiciones de página
+    - Feedback de acciones
+    - _Requirements: 8.10_
+
+- [ ] 20. Checkpoint - Verificar UI completa
+  - Revisar responsive en móvil/tablet/desktop
+  - Verificar modo oscuro
+  - Probar flujo completo de usuario
+
+- [ ] 21. Gestión de usuarios del tenant
+  - [ ] 21.1 Crear vistas CRUD de usuarios
+    - Listado de usuarios del tenant
+    - Crear/editar usuario
+    - Asignar roles y permisos
+    - _Requirements: 6.1, 6.2_
+  - [ ] 21.2 Implementar asignación de módulos
+    - Checkbox por módulo
+    - Permisos granulares (ver, crear, editar, eliminar)
+    - _Requirements: 6.2_
+  - [ ] 21.3 Implementar reset de contraseña
+    - Admin puede resetear contraseña de usuarios
+    - _Requirements: 6.9_
+  - [ ] 21.4 Implementar log de actividad
+    - Mostrar últimas acciones del usuario
+    - Filtrar por tipo de acción
+    - _Requirements: 6.8_
+  - [ ]* 21.5 Write property test for suspended tenant blocking
+    - **Property 3: Suspended Tenant Blocking**
+    - **Validates: Requirements 2.3, 2.4**
+
+- [ ] 22. Optimizaciones finales
+  - [ ] 22.1 Implementar caché de consultas frecuentes
+    - Estadísticas de dashboard
+    - Permisos de usuario
+    - _Requirements: 8.3_
+  - [ ] 22.2 Agregar índices de base de datos
+    - Índices en campos de búsqueda frecuente
+    - Índices compuestos para queries comunes
+    - _Requirements: 8.3_
+  - [ ] 22.3 Configurar logging de producción
+    - Logs estructurados
+    - Rotación de archivos
+    - _Requirements: 3.4, 10.5_
+
+- [ ] 23. Checkpoint final - Verificar sistema completo
+  - Ejecutar suite de tests
+  - Verificar todas las funcionalidades
+  - Revisar logs de auditoría
+  - Verificar rendimiento
+
+## Notes
+
+- Tasks marked with `*` are optional property-based tests that can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Property tests validate universal correctness properties
+- Unit tests validate specific examples and edge cases
+- La migración de datos existentes debe hacerse con cuidado para no perder información
+- Se recomienda hacer backup de la BD antes de cada migración importante

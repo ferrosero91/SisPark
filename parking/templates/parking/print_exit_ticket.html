@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket de Salida</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            width: 80mm;
+            padding: 4mm;
+            background: white;
+        }
+        .ticket {
+            border: 2px dashed #333;
+            padding: 5mm;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px dashed #333;
+            padding-bottom: 4mm;
+            margin-bottom: 4mm;
+        }
+        .parking-name { font-size: 18px; font-weight: bold; }
+        .parking-address { font-size: 11px; margin-top: 2mm; color: #333; }
+        .parking-phone { font-size: 12px; margin-top: 1mm; font-weight: bold; }
+        .ticket-type {
+            background: #10b981;
+            color: white;
+            padding: 3mm 4mm;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            margin: 4mm 0;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding: 2mm 0;
+            border-bottom: 1px dotted #999;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .label { color: #555; }
+        .value { font-weight: bold; }
+        .plate {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            padding: 5mm 0;
+            border: 3px solid #000;
+            margin: 4mm 0;
+            background: #f5f5f5;
+        }
+        .totals {
+            background: #f8fafc;
+            padding: 4mm;
+            margin: 4mm 0;
+            border: 2px solid #e2e8f0;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2mm 0;
+            font-size: 13px;
+        }
+        .total-row.main {
+            font-size: 18px;
+            font-weight: bold;
+            border-top: 2px solid #333;
+            padding-top: 3mm;
+            margin-top: 2mm;
+        }
+        .change-box {
+            background: #10b981;
+            color: white;
+            padding: 4mm;
+            text-align: center;
+            margin: 4mm 0;
+        }
+        .change-label { font-size: 12px; }
+        .change-amount { font-size: 24px; font-weight: bold; }
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #555;
+            margin-top: 4mm;
+            padding-top: 4mm;
+            border-top: 2px dashed #333;
+        }
+        .footer p { margin: 1mm 0; }
+        .brand { font-size: 9px; color: #999; margin-top: 3mm; }
+        @media print {
+            body { width: 80mm; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ticket">
+        <div class="header">
+            <div class="parking-name">{{ parking_lot.name|default:"Parqueadero" }}</div>
+            {% if parking_lot.address %}
+            <div class="parking-address">{{ parking_lot.address }}</div>
+            {% endif %}
+            {% if parking_lot.phone %}
+            <div class="parking-phone">Tel: {{ parking_lot.phone }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="ticket-type">TICKET DE SALIDA</div>
+        
+        <div class="plate">{{ ticket.placa }}</div>
+        
+        <div class="info-row">
+            <span class="label">Ticket:</span>
+            <span class="value">{{ ticket.ticket_number }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Categoría:</span>
+            <span class="value">{{ ticket.category.name }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Entrada:</span>
+            <span class="value">{{ ticket.entry_time|date:"d/m H:i" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Salida:</span>
+            <span class="value">{{ ticket.exit_time|date:"d/m H:i" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Duración:</span>
+            <span class="value">{{ duration }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Método pago:</span>
+            <span class="value">{{ ticket.payment_method.name|default:"Efectivo" }}</span>
+        </div>
+        
+        <div class="totals">
+            <div class="total-row main">
+                <span>TOTAL:</span>
+                <span>${{ ticket.amount_paid|floatformat:0 }}</span>
+            </div>
+            {% if is_cash %}
+            <div class="total-row">
+                <span>Recibido:</span>
+                <span>${{ amount_received|floatformat:0 }}</span>
+            </div>
+            <div class="total-row">
+                <span>Cambio:</span>
+                <span>${{ change|floatformat:0 }}</span>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if is_cash and change > 0 %}
+        <div class="change-box">
+            <div class="change-label">DEVOLVER AL CLIENTE</div>
+            <div class="change-amount">${{ change|floatformat:0 }}</div>
+        </div>
+        {% endif %}
+        
+        <div class="footer">
+            <p><strong>¡Gracias por su visita!</strong></p>
+            <p>Vuelva pronto</p>
+            <p style="margin-top:2mm;">{{ current_time|date:"d/m/Y H:i:s" }}</p>
+            <p class="brand">Powered by SoluPark</p>
+        </div>
+    </div>
+    
+    <div class="no-print" style="text-align:center; margin-top:20px;">
+        <button onclick="window.print()" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#10b981; color:white; border:none; border-radius:8px;">
+            Imprimir
+        </button>
+        <button onclick="window.location.href='{% url 'dashboard' %}'" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#64748b; color:white; border:none; border-radius:8px; margin-left:10px;">
+            Volver
+        </button>
+    </div>
+    
+    <script>window.onload = function() { window.print(); };</script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+{% extends 'superadmin/base.html' %}
+
+{% block title %}Planes de Suscripción{% endblock %}
+{% block page_title %}Planes de Suscripción{% endblock %}
+{% block page_subtitle %}Gestiona los planes disponibles para los parqueaderos{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    
+    <!-- Crear nuevo plan -->
+    <div class="bg-white rounded-xl border border-slate-200 p-6">
+        <h3 class="font-semibold text-slate-800 mb-4">Crear Nuevo Plan</h3>
+        <form method="post" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create">
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Nombre</label>
+                <input type="text" name="name" required
+                       class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Precio</label>
+                <input type="number" name="price" required step="0.01" min="0"
+                       class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Ciclo</label>
+                <select name="billing_cycle" required
+                        class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                    <option value="monthly">Mensual</option>
+                    <option value="annual">Anual</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Descripción</label>
+                <input type="text" name="description"
+                       class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+            </div>
+            <div>
+                <button type="submit" class="w-full px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 text-sm font-medium">
+                    <i class="fas fa-plus mr-1"></i> Crear Plan
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de planes -->
+    <div class="bg-white rounded-xl border border-slate-200">
+        <div class="px-6 py-4 border-b border-slate-100">
+            <h3 class="font-semibold text-slate-800">Planes Existentes</h3>
+        </div>
+        <div class="divide-y divide-slate-100">
+            {% for plan in plans %}
+            <div class="px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center {% if plan.billing_cycle == 'annual' %}bg-amber-100 text-amber-600{% else %}bg-violet-100 text-violet-600{% endif %}">
+                        <i class="fas {% if plan.billing_cycle == 'annual' %}fa-crown{% else %}fa-tag{% endif %} text-xl"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-slate-800">{{ plan.name }}</h4>
+                        <p class="text-sm text-slate-500">{{ plan.description|default:"Sin descripción" }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="text-right">
+                        <span class="text-2xl font-bold text-slate-800">${{ plan.price|floatformat:0 }}</span>
+                        <span class="text-sm text-slate-500">/{% if plan.billing_cycle == 'monthly' %}mes{% else %}año{% endif %}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <form method="post" class="inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="toggle">
+                            <input type="hidden" name="plan_id" value="{{ plan.id }}">
+                            <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-medium {% if plan.is_active %}bg-emerald-100 text-emerald-700 hover:bg-emerald-200{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                                {% if plan.is_active %}Activo{% else %}Inactivo{% endif %}
+                            </button>
+                        </form>
+                        <form method="post" class="inline" onsubmit="return confirm('¿Eliminar este plan?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="plan_id" value="{{ plan.id }}">
+                            <button type="submit" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="px-6 py-12 text-center text-slate-400">
+                <i class="fas fa-tags text-4xl mb-3"></i>
+                <p>No hay planes creados</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

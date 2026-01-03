@@ -1,0 +1,167 @@
+{% extends 'parking/base.html' %}
+
+{% block title %}{{ third_party.full_name }} - SoluPark{% endblock %}
+{% block page_title %}{{ third_party.full_name }}{% endblock %}
+{% block page_subtitle %}Detalle del cliente{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Info del cliente -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-primary-500/30">
+                    {{ third_party.first_name.0|upper }}{{ third_party.last_name.0|upper }}
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">{{ third_party.full_name }}</h2>
+                    <p class="text-slate-500">{{ third_party.get_document_type_display }} {{ third_party.document_number }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'third_party_edit' third_party.pk %}" 
+                   class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
+                    <i class="fas fa-edit"></i>
+                    Editar
+                </a>
+                <a href="{% url 'third_party_delete' third_party.pk %}" 
+                   class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-medium transition-colors">
+                    <i class="fas fa-trash"></i>
+                    Eliminar
+                </a>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-envelope text-blue-600"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500">Email</p>
+                    <p class="font-medium text-slate-900">{{ third_party.email|default:"-" }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-phone text-green-600"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500">Teléfono</p>
+                    <p class="font-medium text-slate-900">{{ third_party.phone|default:"-" }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-map-marker-alt text-amber-600"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500">Dirección</p>
+                    <p class="font-medium text-slate-900">{{ third_party.address|default:"-" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Vehículos -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-car text-primary-500"></i>
+                Vehículos
+            </h3>
+            <a href="{% url 'vehicle_add' third_party.pk %}" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-medium transition-colors">
+                <i class="fas fa-plus"></i>
+                Agregar Vehículo
+            </a>
+        </div>
+        
+        {% if vehicles %}
+        <div class="divide-y divide-slate-100">
+            {% for vehicle in vehicles %}
+            <div class="p-4 flex items-center justify-between hover:bg-slate-50">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-{% if vehicle.vehicle_type == 'motorcycle' %}motorcycle{% elif vehicle.vehicle_type == 'bicycle' %}bicycle{% else %}car{% endif %} text-slate-600 text-lg"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-slate-900 text-lg">{{ vehicle.plate }}</span>
+                            {% if vehicle.is_primary %}
+                            <span class="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">Principal</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-sm text-slate-500">{{ vehicle.brand }} {{ vehicle.model }} - {{ vehicle.color }}</p>
+                    </div>
+                </div>
+                <span class="{% if vehicle.is_active %}text-emerald-600{% else %}text-slate-400{% endif %}">
+                    <i class="fas fa-{% if vehicle.is_active %}check-circle{% else %}times-circle{% endif %}"></i>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center">
+            <i class="fas fa-car text-4xl text-slate-300 mb-3"></i>
+            <p class="text-slate-500">No hay vehículos registrados</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Contratos -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <i class="fas fa-file-contract text-primary-500"></i>
+                Contratos Mensuales
+            </h3>
+            <a href="{% url 'contract_create' %}?third_party={{ third_party.pk }}" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors">
+                <i class="fas fa-plus"></i>
+                Nuevo Contrato
+            </a>
+        </div>
+        
+        {% if contracts %}
+        <div class="divide-y divide-slate-100">
+            {% for contract in contracts %}
+            <div class="p-4 flex items-center justify-between hover:bg-slate-50">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 {% if contract.status == 'active' %}bg-emerald-100{% elif contract.status == 'expired' %}bg-red-100{% else %}bg-slate-100{% endif %} rounded-xl flex items-center justify-center">
+                        <i class="fas fa-file-contract {% if contract.status == 'active' %}text-emerald-600{% elif contract.status == 'expired' %}text-red-600{% else %}text-slate-600{% endif %}"></i>
+                    </div>
+                    <div>
+                        <div class="font-medium text-slate-900">{{ contract.vehicle.plate }}</div>
+                        <p class="text-sm text-slate-500">{{ contract.start_date|date:"d/m/Y" }} - {{ contract.end_date|date:"d/m/Y" }}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="font-bold text-slate-900">${{ contract.monthly_rate|floatformat:0 }}</div>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                        {% if contract.status == 'active' %}bg-emerald-100 text-emerald-700
+                        {% elif contract.status == 'expired' %}bg-red-100 text-red-700
+                        {% else %}bg-slate-100 text-slate-700{% endif %}">
+                        {{ contract.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-8 text-center">
+            <i class="fas fa-file-contract text-4xl text-slate-300 mb-3"></i>
+            <p class="text-slate-500">No hay contratos registrados</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="flex items-center gap-4">
+        <a href="{% url 'third_party_list' %}" 
+           class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
+            <i class="fas fa-arrow-left"></i>
+            Volver a la lista
+        </a>
+    </div>
+</div>
+{% endblock %}
