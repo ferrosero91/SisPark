@@ -129,7 +129,11 @@ fi
 # 6. Construir y levantar contenedores
 # ===========================================
 echo -e "${YELLOW}[6/9] Construyendo contenedores...${NC}"
-docker-compose down 2>/dev/null || true
+
+# Detener y eliminar contenedores y volúmenes anteriores de solupark
+docker-compose down -v 2>/dev/null || true
+
+# Construir imagen
 docker-compose build --no-cache
 
 echo -e "${YELLOW}[7/9] Iniciando servicios...${NC}"
