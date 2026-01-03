@@ -94,6 +94,20 @@
             </div>
             <p class="mt-4 text-sm text-slate-600">Nombre, dirección, contacto, logo</p>
         </a>
+
+        <!-- Copias de Seguridad -->
+        <a href="{% url 'backup_dashboard' %}" class="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-sky-300 transition-all group">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-teal-100 rounded-2xl flex items-center justify-center group-hover:bg-teal-200 transition-colors">
+                    <i class="fas fa-database text-teal-600 text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-slate-900">Copias de Seguridad</h4>
+                    <p class="text-sm text-slate-500">Backup y restauración</p>
+                </div>
+            </div>
+            <p class="mt-4 text-sm text-slate-600">Protege tus datos, descarga y restaura</p>
+        </a>
     </div>
 </div>
 {% endblock %}

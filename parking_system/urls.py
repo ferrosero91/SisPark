@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
 from parking import views
 from parking.views import (
     CategoryListView, CategoryCreateView,
@@ -10,7 +11,14 @@ from parking.views import (
     export_report_excel, export_report_pdf
 )
 
+
+def health_check(request):
+    """Endpoint para verificar el estado de la aplicación"""
+    return JsonResponse({'status': 'ok', 'app': 'solupark'})
+
+
 urlpatterns = [
+    path('health/', health_check, name='health_check'),
     path('admin/', admin.site.urls),
     
     # Autenticación (nuevo sistema)

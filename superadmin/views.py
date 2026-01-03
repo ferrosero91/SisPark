@@ -382,3 +382,322 @@ def subscription_payments(request):
         'status_choices': SubscriptionPayment.PaymentStatus.choices,
     }
     return render(request, 'superadmin/subscription_payments.html', context)
+
+
+# ==========================================
+# BACKUP Y RESTAURACIÓN (SUPERADMIN)
+# ==========================================
+
+import os
+from django.http import FileResponse, JsonResponse
+from config.services import SystemBackupService, TenantBackupService
+
+
+@login_required
+@superadmin_required
+def backup_dashboard(request):
+    """Dashboard de backups del sistema."""
+    service = SystemBackupService()
+    system_backups = service.list_system_backups()
+    sql_backups = service.list_sql_backups()
+    
+    # Formatear tamaños para system backups
+    for backup in system_backups:
+        size = backup['size']
+        if size < 1024:
+            backup['size_formatted'] = f"{size} B"
+        elif size < 1024 * 1024:
+            backup['size_formatted'] = f"{size / 1024:.1f} KB"
+        else:
+            backup['size_formatted'] = f"{size / (1024 * 1024):.2f} MB"
+    
+    # Formatear tamaños para SQL backups
+    for backup in sql_backups:
+        size = backup['size']
+        if size < 1024:
+            backup['size_formatted'] = f"{size} B"
+        elif size < 1024 * 1024:
+            backup['size_formatted'] = f"{size / 1024:.1f} KB"
+        else:
+            backup['size_formatted'] = f"{size / (1024 * 1024):.2f} MB"
+    
+    # Listar backups de tenants
+    tenant_backups = []
+    tenants = Tenant.objects.all()
+    for tenant in tenants:
+        tenant_service = TenantBackupService(tenant)
+        backups = tenant_service.list_backups()
+        for backup in backups:
+            size = backup['size']
+            if size < 1024:
+                backup['size_formatted'] = f"{size} B"
+            elif size < 1024 * 1024:
+                backup['size_formatted'] = f"{size / 1024:.1f} KB"
+            else:
+                backup['size_formatted'] = f"{size / (1024 * 1024):.2f} MB"
+            backup['tenant'] = tenant
+            tenant_backups.append(backup)
+    
+    tenant_backups.sort(key=lambda x: x['created'], reverse=True)
+    
+    # Detectar tipo de base de datos
+    from django.conf import settings as django_settings
+    db_engine = django_settings.DATABASES['default'].get('ENGINE', '')
+    if 'postgresql' in db_engine:
+        db_type = 'PostgreSQL'
+    elif 'sqlite' in db_engine:
+        db_type = 'SQLite'
+    else:
+        db_type = 'Desconocido'
+    
+    return render(request, 'superadmin/backup/dashboard.html', {
+        'system_backups': system_backups,
+        'sql_backups': sql_backups,
+        'tenant_backups': tenant_backups[:20],
+        'tenants': tenants,
+        'db_type': db_type,
+    })
+
+
+@login_required
+@superadmin_required
+def backup_create_system(request):
+    """Crear backup completo del sistema."""
+    if request.method == 'POST':
+        try:
+            service = SystemBackupService()
+            filepath, filename = service.create_full_backup()
+            messages.success(request, f'Backup del sistema "{filename}" creado exitosamente')
+        except Exception as e:
+            messages.error(request, f'Error al crear backup: {str(e)}')
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+@login_required
+@superadmin_required
+def backup_create_tenant(request, pk):
+    """Crear backup de un tenant específico."""
+    tenant = get_object_or_404(Tenant, pk=pk)
+    
+    if request.method == 'POST':
+        try:
+            service = SystemBackupService()
+            filepath, filename = service.create_tenant_backup(tenant)
+            messages.success(request, f'Backup de "{tenant.name}" creado: {filename}')
+        except Exception as e:
+            messages.error(request, f'Error al crear backup: {str(e)}')
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+@login_required
+@superadmin_required
+def backup_download_system(request, filename):
+    """Descargar backup del sistema."""
+    service = SystemBackupService()
+    filepath = os.path.join(service.backup_dir, filename)
+    
+    if not os.path.exists(filepath):
+        messages.error(request, 'Archivo no encontrado')
+        return redirect('superadmin:backup_dashboard')
+    
+    return FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filename)
+
+
+@login_required
+@superadmin_required
+def backup_download_tenant(request, pk, filename):
+    """Descargar backup de un tenant."""
+    tenant = get_object_or_404(Tenant, pk=pk)
+    service = TenantBackupService(tenant)
+    filepath = os.path.join(service.backup_dir, filename)
+    
+    if not os.path.exists(filepath):
+        messages.error(request, 'Archivo no encontrado')
+        return redirect('superadmin:backup_dashboard')
+    
+    return FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filename)
+
+
+@login_required
+@superadmin_required
+def backup_delete_system(request, filename):
+    """Eliminar backup del sistema."""
+    if request.method == 'POST':
+        service = SystemBackupService()
+        if service.delete_backup(filename):
+            messages.success(request, 'Backup eliminado')
+        else:
+            messages.error(request, 'No se pudo eliminar')
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+@login_required
+@superadmin_required
+def backup_delete_tenant(request, pk, filename):
+    """Eliminar backup de un tenant."""
+    tenant = get_object_or_404(Tenant, pk=pk)
+    
+    if request.method == 'POST':
+        service = TenantBackupService(tenant)
+        if service.delete_backup(filename):
+            messages.success(request, 'Backup eliminado')
+        else:
+            messages.error(request, 'No se pudo eliminar')
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+@login_required
+@superadmin_required
+def backup_info_system(request, filename):
+    """Información de backup del sistema."""
+    service = SystemBackupService()
+    filepath = os.path.join(service.backup_dir, filename)
+    info = service.get_backup_info(filepath)
+    return JsonResponse(info)
+
+
+@login_required
+@superadmin_required
+def backup_restore_tenant(request, pk):
+    """Restaurar backup de un tenant."""
+    tenant = get_object_or_404(Tenant, pk=pk)
+    
+    if request.method == 'POST':
+        filename = request.POST.get('filename')
+        
+        if filename:
+            service = TenantBackupService(tenant)
+            filepath = os.path.join(service.backup_dir, filename)
+            
+            if not os.path.exists(filepath):
+                messages.error(request, 'Archivo no encontrado')
+                return redirect('superadmin:backup_dashboard')
+            
+            clear_existing = request.POST.get('clear_existing') == 'on'
+            result = service.restore_backup(filepath, clear_existing)
+            
+            if result.get('success'):
+                total = sum(result.get('restored', {}).values())
+                messages.success(request, f'Restauración completada. {total} registros restaurados.')
+            else:
+                messages.error(request, f'Error: {result.get("error", "Error desconocido")}')
+        
+        elif 'backup_file' in request.FILES:
+            uploaded_file = request.FILES['backup_file']
+            
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
+                for chunk in uploaded_file.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
+            
+            try:
+                service = TenantBackupService(tenant)
+                clear_existing = request.POST.get('clear_existing') == 'on'
+                result = service.restore_backup(tmp_path, clear_existing)
+                
+                if result.get('success'):
+                    total = sum(result.get('restored', {}).values())
+                    messages.success(request, f'Restauración completada. {total} registros.')
+                else:
+                    messages.error(request, f'Error: {result.get("error")}')
+            finally:
+                os.unlink(tmp_path)
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+# ==========================================
+# BACKUP SQL (SUPERADMIN)
+# ==========================================
+
+@login_required
+@superadmin_required
+def backup_create_sql(request):
+    """Crear backup SQL completo de la base de datos."""
+    if request.method == 'POST':
+        try:
+            service = SystemBackupService()
+            filepath, filename = service.create_sql_backup()
+            messages.success(request, f'Backup SQL "{filename}" creado exitosamente')
+        except Exception as e:
+            messages.error(request, f'Error al crear backup SQL: {str(e)}')
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+@login_required
+@superadmin_required
+def backup_download_sql(request, filename):
+    """Descargar backup SQL."""
+    service = SystemBackupService()
+    filepath = os.path.join(service.backup_dir, filename)
+    
+    if not os.path.exists(filepath):
+        messages.error(request, 'Archivo no encontrado')
+        return redirect('superadmin:backup_dashboard')
+    
+    return FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filename)
+
+
+@login_required
+@superadmin_required
+def backup_delete_sql(request, filename):
+    """Eliminar backup SQL."""
+    if request.method == 'POST':
+        service = SystemBackupService()
+        filepath = os.path.join(service.backup_dir, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            messages.success(request, 'Backup SQL eliminado')
+        else:
+            messages.error(request, 'Archivo no encontrado')
+    
+    return redirect('superadmin:backup_dashboard')
+
+
+@login_required
+@superadmin_required
+def backup_restore_sql(request):
+    """Restaurar desde backup SQL."""
+    if request.method == 'POST':
+        service = SystemBackupService()
+        
+        filename = request.POST.get('filename')
+        if filename:
+            filepath = os.path.join(service.backup_dir, filename)
+            if not os.path.exists(filepath):
+                messages.error(request, 'Archivo no encontrado')
+                return redirect('superadmin:backup_dashboard')
+            
+            result = service.restore_sql_backup(filepath)
+            
+            if result.get('success'):
+                messages.success(request, result.get('message', 'Restauración completada'))
+            else:
+                messages.error(request, f'Error: {result.get("error", "Error desconocido")}')
+        
+        elif 'backup_file' in request.FILES:
+            uploaded_file = request.FILES['backup_file']
+            
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
+                for chunk in uploaded_file.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
+            
+            try:
+                result = service.restore_sql_backup(tmp_path)
+                
+                if result.get('success'):
+                    messages.success(request, result.get('message', 'Restauración completada'))
+                else:
+                    messages.error(request, f'Error: {result.get("error")}')
+            finally:
+                os.unlink(tmp_path)
+    
+    return redirect('superadmin:backup_dashboard')

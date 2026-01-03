@@ -287,3 +287,187 @@ def user_delete(request, pk):
         return redirect('config_users')
     
     return render(request, 'config/users/confirm_delete.html', {'del_user': user})
+
+
+# ============ BACKUP Y RESTAURACIÓN ============
+
+import os
+from django.http import FileResponse, JsonResponse
+from django.core.files.storage import default_storage
+from .services import TenantBackupService
+
+
+@login_required
+def backup_dashboard(request):
+    """Dashboard de copias de seguridad del tenant."""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    service = TenantBackupService(tenant)
+    backups = service.list_backups()
+    
+    # Formatear tamaños
+    for backup in backups:
+        size = backup['size']
+        if size < 1024:
+            backup['size_formatted'] = f"{size} B"
+        elif size < 1024 * 1024:
+            backup['size_formatted'] = f"{size / 1024:.1f} KB"
+        else:
+            backup['size_formatted'] = f"{size / (1024 * 1024):.2f} MB"
+    
+    return render(request, 'config/backup/dashboard.html', {
+        'tenant': tenant,
+        'backups': backups
+    })
+
+
+@login_required
+def backup_create(request):
+    """Crear una nueva copia de seguridad."""
+    tenant = get_tenant(request)
+    if not tenant:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+    
+    if request.method == 'POST':
+        try:
+            service = TenantBackupService(tenant)
+            filepath, filename = service.create_backup()
+            
+            messages.success(request, f'Copia de seguridad "{filename}" creada exitosamente')
+            return redirect('backup_dashboard')
+        except Exception as e:
+            messages.error(request, f'Error al crear backup: {str(e)}')
+            return redirect('backup_dashboard')
+    
+    return redirect('backup_dashboard')
+
+
+@login_required
+def backup_download(request, filename):
+    """Descargar una copia de seguridad."""
+    tenant = get_tenant(request)
+    if not tenant:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+    
+    # Verificar que el archivo pertenece al tenant
+    if not filename.startswith(f"backup_{tenant.slug}_"):
+        return JsonResponse({'error': 'Archivo no encontrado'}, status=404)
+    
+    service = TenantBackupService(tenant)
+    filepath = os.path.join(service.backup_dir, filename)
+    
+    if not os.path.exists(filepath):
+        messages.error(request, 'Archivo no encontrado')
+        return redirect('backup_dashboard')
+    
+    response = FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filename)
+    return response
+
+
+@login_required
+def backup_delete(request, filename):
+    """Eliminar una copia de seguridad."""
+    tenant = get_tenant(request)
+    if not tenant:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+    
+    if request.method == 'POST':
+        service = TenantBackupService(tenant)
+        if service.delete_backup(filename):
+            messages.success(request, 'Copia de seguridad eliminada')
+        else:
+            messages.error(request, 'No se pudo eliminar el archivo')
+    
+    return redirect('backup_dashboard')
+
+
+@login_required
+def backup_info(request, filename):
+    """Obtener información de un backup."""
+    tenant = get_tenant(request)
+    if not tenant:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+    
+    if not filename.startswith(f"backup_{tenant.slug}_"):
+        return JsonResponse({'error': 'Archivo no encontrado'}, status=404)
+    
+    service = TenantBackupService(tenant)
+    filepath = os.path.join(service.backup_dir, filename)
+    
+    info = service.get_backup_info(filepath)
+    return JsonResponse(info)
+
+
+@login_required
+def backup_restore(request):
+    """Restaurar desde una copia de seguridad."""
+    tenant = get_tenant(request)
+    if not tenant:
+        return JsonResponse({'error': 'No autorizado'}, status=403)
+    
+    if request.method == 'POST':
+        # Restaurar desde archivo existente
+        filename = request.POST.get('filename')
+        if filename:
+            if not filename.startswith(f"backup_{tenant.slug}_"):
+                messages.error(request, 'Archivo no válido')
+                return redirect('backup_dashboard')
+            
+            service = TenantBackupService(tenant)
+            filepath = os.path.join(service.backup_dir, filename)
+            
+            if not os.path.exists(filepath):
+                messages.error(request, 'Archivo no encontrado')
+                return redirect('backup_dashboard')
+            
+            clear_existing = request.POST.get('clear_existing') == 'on'
+            result = service.restore_backup(filepath, clear_existing)
+            
+            if result.get('success'):
+                total = sum(result.get('restored', {}).values())
+                messages.success(request, f'Restauración completada. {total} registros restaurados.')
+            else:
+                messages.error(request, f'Error en restauración: {result.get("error", "Error desconocido")}')
+        
+        # Restaurar desde archivo subido
+        elif 'backup_file' in request.FILES:
+            uploaded_file = request.FILES['backup_file']
+            
+            if not uploaded_file.name.endswith('.zip'):
+                messages.error(request, 'El archivo debe ser un ZIP')
+                return redirect('backup_dashboard')
+            
+            # Guardar temporalmente
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp:
+                for chunk in uploaded_file.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
+            
+            try:
+                service = TenantBackupService(tenant)
+                
+                # Verificar que es un backup válido
+                info = service.get_backup_info(tmp_path)
+                if not info.get('valid'):
+                    messages.error(request, 'Archivo de backup no válido')
+                    os.unlink(tmp_path)
+                    return redirect('backup_dashboard')
+                
+                clear_existing = request.POST.get('clear_existing') == 'on'
+                result = service.restore_backup(tmp_path, clear_existing)
+                
+                if result.get('success'):
+                    total = sum(result.get('restored', {}).values())
+                    messages.success(request, f'Restauración completada. {total} registros restaurados.')
+                else:
+                    messages.error(request, f'Error: {result.get("error", "Error desconocido")}')
+                
+            finally:
+                os.unlink(tmp_path)
+        else:
+            messages.error(request, 'No se especificó archivo para restaurar')
+    
+    return redirect('backup_dashboard')

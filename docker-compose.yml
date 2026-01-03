@@ -1,0 +1,95 @@
+# ===========================================
+# SoluPark - Docker Compose para Producción
+# Sin Nginx interno - usa Nginx del sistema como proxy
+# ===========================================
+version: '3.8'
+
+services:
+  # ===========================================
+  # Aplicación Django
+  # ===========================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: solupark_web
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - DJANGO_SETTINGS_MODULE=parking_system.settings
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - solupark_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===========================================
+  # Base de Datos PostgreSQL
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    container_name: solupark_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-solupark}
+      POSTGRES_USER: ${DB_USER:-solupark}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - solupark_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-solupark} -d ${DB_NAME:-solupark}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Redis para Cache y Sesiones
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: solupark_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - solupark_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ===========================================
+# Volúmenes
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ===========================================
+# Redes
+# ===========================================
+networks:
+  solupark_network:
+    driver: bridge

@@ -40,7 +40,7 @@
                     <span>Dashboard</span>
                 </a>
                 <a href="{% url 'superadmin:tenant_list' %}" 
-                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if 'tenant' in request.resolver_match.url_name and 'subscription' not in request.resolver_match.url_name %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
+                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if 'tenant' in request.resolver_match.url_name and 'subscription' not in request.resolver_match.url_name and 'backup' not in request.resolver_match.url_name %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
                     <i class="fas fa-building w-5"></i>
                     <span>Parqueaderos</span>
                 </a>
@@ -53,6 +53,11 @@
                    class="flex items-center gap-3 px-4 py-3 rounded-xl {% if request.resolver_match.url_name == 'subscription_payments' %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
                     <i class="fas fa-receipt w-5"></i>
                     <span>Pagos</span>
+                </a>
+                <a href="{% url 'superadmin:backup_dashboard' %}" 
+                   class="flex items-center gap-3 px-4 py-3 rounded-xl {% if 'backup' in request.resolver_match.url_name %}bg-violet-600 text-white{% else %}text-slate-300 hover:bg-slate-800{% endif %} transition-colors">
+                    <i class="fas fa-database w-5"></i>
+                    <span>Backups</span>
                 </a>
             </nav>
             

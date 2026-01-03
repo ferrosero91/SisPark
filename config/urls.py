@@ -22,4 +22,12 @@ urlpatterns = [
     path('usuarios/crear/', views.user_create, name='config_user_create'),
     path('usuarios/<uuid:pk>/editar/', views.user_edit, name='config_user_edit'),
     path('usuarios/<uuid:pk>/eliminar/', views.user_delete, name='config_user_delete'),
+    
+    # Backup y Restauración
+    path('backup/', views.backup_dashboard, name='backup_dashboard'),
+    path('backup/crear/', views.backup_create, name='backup_create'),
+    path('backup/descargar/<str:filename>/', views.backup_download, name='backup_download'),
+    path('backup/eliminar/<str:filename>/', views.backup_delete, name='backup_delete'),
+    path('backup/info/<str:filename>/', views.backup_info, name='backup_info'),
+    path('backup/restaurar/', views.backup_restore, name='backup_restore'),
 ]
