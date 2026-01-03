@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     curl \
     netcat-openbsd \
+    gosu \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -40,12 +41,12 @@ COPY --chown=solupark:solupark . .
 COPY --chown=solupark:solupark docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Crear directorios necesarios
+# Crear directorios necesarios con permisos correctos
 RUN mkdir -p /app/staticfiles /app/media /app/logs \
     && chown -R solupark:solupark /app
 
-# Cambiar a usuario no-root
-USER solupark
+# NO cambiar a usuario no-root aquí - lo haremos en entrypoint después de collectstatic
+# USER solupark
 
 # Exponer puerto
 EXPOSE 8000

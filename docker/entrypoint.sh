@@ -21,7 +21,11 @@ while ! nc -z redis 6379; do
 done
 echo "Redis está listo!"
 
-# Ejecutar migraciones
+# Arreglar permisos de directorios montados (ejecutar como root)
+echo "Configurando permisos..."
+chown -R solupark:solupark /app/staticfiles /app/media 2>/dev/null || true
+
+# Ejecutar migraciones como root (para evitar problemas de permisos)
 echo "Ejecutando migraciones..."
 python manage.py migrate --noinput
 
@@ -29,6 +33,9 @@ python manage.py migrate --noinput
 echo "Recolectando archivos estáticos..."
 python manage.py collectstatic --noinput
 
-# Ejecutar comando pasado como argumento
-echo "Iniciando aplicación..."
-exec "$@"
+# Arreglar permisos después de collectstatic
+chown -R solupark:solupark /app/staticfiles /app/media 2>/dev/null || true
+
+# Ejecutar comando como usuario solupark
+echo "Iniciando aplicación como usuario solupark..."
+exec gosu solupark "$@"
