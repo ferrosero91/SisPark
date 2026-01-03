@@ -31,6 +31,10 @@ python manage.py migrate --noinput
 echo "Recolectando archivos estáticos..."
 python manage.py collectstatic --noinput --clear
 
+# Crear superusuario por defecto si no existe
+echo "Verificando superusuario..."
+python manage.py create_default_superuser
+
 # Ejecutar comando pasado como argumento
 echo "Iniciando Gunicorn..."
 exec "$@"

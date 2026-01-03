@@ -118,6 +118,11 @@ class User(AbstractUser):
         blank=True,
         verbose_name="Último cambio de contraseña"
     )
+    must_change_password = models.BooleanField(
+        default=False,
+        verbose_name="Debe cambiar contraseña",
+        help_text="Forzar cambio de contraseña en el próximo login"
+    )
     
     # Roles asignados (ManyToMany con Role del módulo permissions)
     roles = models.ManyToManyField(

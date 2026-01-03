@@ -246,16 +246,6 @@ else
 fi
 
 # ===========================================
-# Crear superusuario
-# ===========================================
-echo ""
-read -p "¿Crear superusuario ahora? (s/n): " CREATE_SUPER
-
-if [ "$CREATE_SUPER" = "s" ] || [ "$CREATE_SUPER" = "S" ]; then
-    docker exec -it solupark_web python manage.py createsuperuser
-fi
-
-# ===========================================
 # Resumen
 # ===========================================
 echo ""
@@ -265,11 +255,15 @@ echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo -e "URL: ${BLUE}https://${DOMAIN}${NC}"
 echo ""
+echo -e "${YELLOW}Credenciales por defecto:${NC}"
+echo -e "  Email: ${GREEN}admin@solupark.com${NC}"
+echo -e "  Contraseña: ${GREEN}Admin123*${NC}"
+echo -e "${RED}  ¡Cambie la contraseña en el primer login!${NC}"
+echo ""
 echo -e "${YELLOW}Comandos útiles:${NC}"
 echo "  cd $APP_DIR"
 echo "  docker-compose logs -f web     # Ver logs"
 echo "  docker-compose restart         # Reiniciar"
 echo "  docker-compose down            # Detener"
 echo "  docker-compose up -d           # Iniciar"
-echo "  docker exec -it solupark_web python manage.py createsuperuser"
 echo ""

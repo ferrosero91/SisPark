@@ -98,6 +98,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Custom middleware
     'tenants.middleware.TenantMiddleware',
+    'users.middleware.ForcePasswordChangeMiddleware',
 ]
 
 ROOT_URLCONF = 'parking_system.urls'
