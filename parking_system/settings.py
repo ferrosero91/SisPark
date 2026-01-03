@@ -273,6 +273,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # LOGGING
 # ===========================================
 
+# En producción (Docker), usar solo consola - los logs van a docker logs
+# En desarrollo, opcionalmente usar archivo
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -289,13 +291,6 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': BASE_DIR / 'logs' / 'solupark.log',
-            'maxBytes': 1024 * 1024 * 5,  # 5 MB
-            'backupCount': 5,
             'formatter': 'verbose',
         },
     },
@@ -310,21 +305,17 @@ LOGGING = {
             'propagate': False,
         },
         'tenants': {
-            'handlers': ['console', 'file'] if not DEBUG else ['console'],
+            'handlers': ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
         'audit': {
-            'handlers': ['console', 'file'] if not DEBUG else ['console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
     },
 }
-
-# Crear directorio de logs si no existe
-LOGS_DIR = BASE_DIR / 'logs'
-LOGS_DIR.mkdir(exist_ok=True)
 
 # ===========================================
 # SOLUPARK CUSTOM SETTINGS
