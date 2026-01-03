@@ -216,6 +216,29 @@
                 {% endif %}
             {% endif %}
             
+            <!-- Alerta de turno -->
+            {% if show_turno_alert %}
+            <div class="bg-violet-600 text-white px-4 lg:px-6 py-2 lg:py-3 flex items-center justify-between text-sm">
+                <div class="flex items-center gap-2 lg:gap-3">
+                    <i class="fas fa-cash-register"></i>
+                    <span class="font-medium">No tiene un turno abierto. Debe abrir su turno para registrar vehículos.</span>
+                </div>
+                <a href="{% url 'abrir_turno' %}" class="px-3 py-1 bg-white text-violet-600 rounded-lg font-medium hover:bg-violet-50 text-xs lg:text-sm">
+                    Abrir Turno
+                </a>
+            </div>
+            {% elif turno_activo %}
+            <div class="bg-emerald-600 text-white px-4 lg:px-6 py-1.5 flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Turno activo desde {{ turno_activo.start_time|date:"H:i" }} | Base: ${{ turno_activo.initial_cash|floatformat:0 }}</span>
+                </div>
+                <a href="{% url 'cash_register' %}" class="px-2 py-0.5 bg-white/20 text-white rounded font-medium hover:bg-white/30">
+                    Ver Caja
+                </a>
+            </div>
+            {% endif %}
+            
             <!-- Messages -->
             {% if messages %}
             <div class="px-4 lg:px-6 pt-4">

@@ -88,6 +88,14 @@ class VehicleEntryView(CreateView):
     template_name = 'parking/vehicle_entry.html'
     success_url = reverse_lazy('print-ticket')
 
+    def dispatch(self, request, *args, **kwargs):
+        # Verificar si tiene turno activo
+        tenant = get_tenant_from_user(request.user)
+        if tenant and not has_active_turno(request.user, tenant):
+            messages.warning(request, 'Debe abrir un turno antes de registrar vehículos.')
+            return redirect('abrir_turno')
+        return super().dispatch(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['tenant'] = get_tenant_from_user(self.request.user)
@@ -145,6 +153,11 @@ class VehicleEntryView(CreateView):
 @login_required
 def vehicle_exit(request):
     tenant = get_tenant_from_user(request.user)
+    
+    # Verificar si tiene turno activo
+    if tenant and not has_active_turno(request.user, tenant):
+        messages.warning(request, 'Debe abrir un turno antes de registrar salidas.')
+        return redirect('abrir_turno')
     
     if request.method == 'POST':
         identifier = request.POST.get('identifier')
@@ -1198,6 +1211,14 @@ def cash_register(request):
     tenant = get_tenant_from_user(request.user)
     is_vendedor = request.user.groups.filter(name='Vendedor').exists()
     today = timezone.now().date()
+    
+    # Obtener turno activo del usuario
+    from .models import Turno
+    turno_activo = Turno.objects.all_tenants().filter(
+        tenant=tenant,
+        user=request.user,
+        is_active=True
+    ).first() if tenant else None
 
     if is_vendedor:
         start_date = timezone.make_aware(datetime.combine(today, datetime.min.time()))
@@ -1216,6 +1237,10 @@ def cash_register(request):
         else:
             start_date = timezone.make_aware(datetime.combine(today, datetime.min.time()))
             end_date = start_date + timedelta(days=1)
+    
+    # Si hay turno activo, filtrar desde que se abrió el turno
+    if turno_activo:
+        start_date = turno_activo.start_time
 
     # Tickets de parqueadero
     if tenant:
@@ -1300,7 +1325,7 @@ def cash_register(request):
     total_cash = float(cash_from_tickets) + float(total_contracts_cash)
     total_all = float(total_income) + float(total_contracts)
 
-    caja_date = start_date.date()
+    caja_date = start_date.date() if not turno_activo else today
     if tenant:
         caja_query = Caja.objects.all_tenants().filter(tenant=tenant, fecha=caja_date, tipo='Ingreso')
     else:
@@ -1315,14 +1340,16 @@ def cash_register(request):
             fecha=caja_date,
             tipo='Ingreso',
             monto=Decimal(str(total_cash)),
-            descripcion=f'Ingresos del {start_date.date()}',
+            descripcion=f'Ingresos del {caja_date}',
             dinero_inicial=0.00
         )
         if tenant:
             caja.tenant = tenant
         caja.save()
 
-    dinero_esperado = float(caja.dinero_inicial) + total_cash
+    # Usar dinero inicial del turno activo si existe
+    dinero_inicial_base = float(turno_activo.initial_cash) if turno_activo else float(caja.dinero_inicial)
+    dinero_esperado = dinero_inicial_base + total_cash
 
     if request.method == 'POST' and 'set_dinero_inicial' in request.POST:
         try:
@@ -1331,6 +1358,9 @@ def cash_register(request):
                 messages.error(request, 'El dinero inicial no puede ser negativo.')
             else:
                 caja.dinero_inicial = dinero_inicial
+                if turno_activo:
+                    turno_activo.initial_cash = dinero_inicial
+                    turno_activo.save()
                 caja.save()
                 messages.success(request, 'Dinero inicial establecido correctamente.')
             return redirect('cash_register')
@@ -1352,8 +1382,25 @@ def cash_register(request):
             caja.monto = Decimal(str(total_cash))
             caja.cuadre_realizado = True
             caja.save()
+            
+            # Cerrar el turno activo del usuario
+            from .models import Turno
+            turno_activo = Turno.objects.all_tenants().filter(
+                tenant=tenant,
+                user=request.user,
+                is_active=True
+            ).first()
+            
+            if turno_activo:
+                turno_activo.end_time = timezone.now()
+                turno_activo.final_cash = dinero_final
+                turno_activo.expected_cash = dinero_esperado
+                turno_activo.difference = dinero_final - dinero_esperado
+                turno_activo.is_active = False
+                turno_activo.closed_by = request.user
+                turno_activo.save()
 
-            messages.success(request, 'Cuadre de caja realizado con éxito.')
+            messages.success(request, 'Cuadre de caja realizado con éxito. Turno cerrado.')
             return redirect('cash_register')
         except ValueError:
             messages.error(request, 'Por favor, ingrese un valor numérico válido.')
@@ -1641,3 +1688,97 @@ def export_cash_register_pdf(request):
     response['Content-Disposition'] = f'attachment; filename=cuadre_caja_{report_date}.pdf'
     response.write(buffer.getvalue())
     return response
+
+
+# ==========================================
+# SISTEMA DE TURNOS
+# ==========================================
+
+from .models import Turno
+
+
+def get_active_turno(user, tenant):
+    """Obtiene el turno activo del usuario"""
+    if not tenant:
+        return None
+    return Turno.objects.all_tenants().filter(
+        tenant=tenant,
+        user=user,
+        is_active=True
+    ).first()
+
+
+def has_active_turno(user, tenant):
+    """Verifica si el usuario tiene un turno activo"""
+    return get_active_turno(user, tenant) is not None
+
+
+@login_required
+def abrir_turno(request):
+    """Vista para abrir un nuevo turno - pide dinero inicial y enlaza con caja"""
+    tenant = get_tenant_from_user(request.user)
+    
+    if not tenant:
+        messages.error(request, 'No tiene un parqueadero asignado.')
+        return redirect('dashboard')
+    
+    # Verificar si ya tiene turno activo
+    turno_activo = get_active_turno(request.user, tenant)
+    if turno_activo:
+        messages.warning(request, 'Ya tiene un turno activo.')
+        return redirect('dashboard')
+    
+    if request.method == 'POST':
+        try:
+            initial_cash = float(request.POST.get('initial_cash', 0))
+            if initial_cash < 0:
+                messages.error(request, 'El dinero inicial no puede ser negativo.')
+                return redirect('abrir_turno')
+            
+            # Buscar caja del día
+            today = timezone.now().date()
+            caja = Caja.objects.all_tenants().filter(
+                tenant=tenant,
+                fecha=today,
+                tipo='Ingreso'
+            ).first()
+            
+            # Si la caja existe y ya tiene cuadre realizado, resetearla para el nuevo turno
+            if caja and caja.cuadre_realizado:
+                caja.cuadre_realizado = False
+                caja.dinero_inicial = initial_cash
+                caja.dinero_final = None
+                caja.monto = 0
+                caja.save()
+            elif not caja:
+                caja = Caja(
+                    tenant=tenant,
+                    fecha=today,
+                    tipo='Ingreso',
+                    dinero_inicial=initial_cash,
+                    monto=0,
+                    descripcion=f'Caja del {today}'
+                )
+                caja.save()
+            elif not caja.dinero_inicial or caja.dinero_inicial == 0:
+                caja.dinero_inicial = initial_cash
+                caja.save()
+            
+            # Crear el turno enlazado a la caja
+            turno = Turno(
+                user=request.user,
+                initial_cash=initial_cash,
+                caja=caja,
+                tenant=tenant
+            )
+            turno.save()
+            
+            messages.success(request, f'Turno abierto con ${initial_cash:,.0f} de base.')
+            return redirect('dashboard')
+        except ValueError:
+            messages.error(request, 'Por favor ingrese un valor numérico válido.')
+    
+    return render(request, 'parking/abrir_turno.html', {
+        'tenant': tenant
+    })
+

@@ -8,7 +8,8 @@ from parking.views import (
     CategoryListView, CategoryCreateView,
     VehicleEntryView, vehicle_exit, vehicle_payment, print_ticket, print_exit_ticket, ReportView,
     category_edit, cash_register, export_cash_register_excel, export_cash_register_pdf,
-    export_report_excel, export_report_pdf
+    export_report_excel, export_report_pdf,
+    abrir_turno
 )
 
 
@@ -52,4 +53,7 @@ urlpatterns = [
     path('cash-register/export/excel/', export_cash_register_excel, name='cash_register_excel'),
     path('cash-register/export/pdf/', export_cash_register_pdf, name='cash_register_pdf'),
     path('validate-plate/<str:plate>/', views.validate_plate, name='validate-plate'),
+    
+    # Turno (abrir caja)
+    path('turno/abrir/', abrir_turno, name='abrir_turno'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

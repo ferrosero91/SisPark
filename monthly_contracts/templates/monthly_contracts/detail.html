@@ -159,7 +159,7 @@
                         <div class="text-xs text-emerald-600 mt-1">Pagado</div>
                     </div>
                     {% else %}
-                    <a href="{% url 'contract_payment' contract.pk %}?month={{ month_data.month }}&year={{ month_data.year }}"
+                    <a href="{% url 'contract_payment' contract.pk %}?month={{ month_data.month|stringformat:"d" }}&year={{ month_data.year|stringformat:"d" }}"
                        class="block bg-slate-50 border-2 border-slate-200 hover:border-primary-300 hover:bg-primary-50 rounded-xl p-3 text-center transition-colors">
                         <div class="text-xs text-slate-500 font-medium">{{ month_data.month_name }}</div>
                         <div class="text-sm font-bold text-slate-700">{{ month_data.year }}</div>

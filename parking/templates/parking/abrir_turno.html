@@ -1,0 +1,84 @@
+{% extends 'parking/base.html' %}
+{% load static %}
+
+{% block title %}Abrir Turno{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-8">
+        <div class="text-center mb-8">
+            <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-cash-register text-emerald-600 text-3xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-slate-800">Abrir Turno</h1>
+            <p class="text-slate-500 mt-2">Ingrese el dinero inicial de caja</p>
+        </div>
+
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">
+                    <i class="fas fa-money-bill-wave mr-2 text-emerald-500"></i>
+                    Dinero Inicial (Base de Caja)
+                </label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">$</span>
+                    <input type="number" 
+                           name="initial_cash" 
+                           id="initial_cash"
+                           min="0" 
+                           step="100"
+                           value="0"
+                           required
+                           class="w-full pl-10 pr-4 py-4 text-2xl font-bold text-center border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                           placeholder="0">
+                </div>
+                <p class="text-xs text-slate-400 mt-2 text-center">
+                    Ingrese el efectivo con el que inicia su turno
+                </p>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div class="flex items-start gap-3">
+                    <i class="fas fa-info-circle text-amber-500 mt-0.5"></i>
+                    <div class="text-sm text-amber-700">
+                        <p class="font-medium">Importante:</p>
+                        <ul class="mt-1 space-y-1 text-amber-600">
+                            <li>• Cuente el dinero antes de iniciar</li>
+                            <li>• Este valor se usará para el cuadre de caja</li>
+                            <li>• Debe cerrar el turno al finalizar</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <a href="{% url 'dashboard' %}" 
+                   class="flex-1 px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors text-center">
+                    Cancelar
+                </a>
+                <button type="submit" 
+                        class="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors">
+                    <i class="fas fa-play mr-2"></i>
+                    Abrir Turno
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-slate-100 text-center">
+            <p class="text-sm text-slate-500">
+                <i class="fas fa-user mr-1"></i>
+                {{ request.user.get_full_name }}
+            </p>
+            <p class="text-xs text-slate-400 mt-1">
+                {{ tenant.name }}
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('initial_cash').focus();
+</script>
+{% endblock %}

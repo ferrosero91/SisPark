@@ -293,6 +293,181 @@ class Caja(TenantModel):
         return f"{self.fecha} - {self.tipo} - ${self.monto}"
 
 
+class Turno(TenantModel):
+    """
+    Turno de trabajo por usuario.
+    Cada usuario debe abrir un turno para poder registrar vehículos.
+    Enlazado con el modelo Caja para el cuadre diario.
+    """
+    user = models.ForeignKey(
+        'users.User', on_delete=models.CASCADE,
+        related_name='turnos',
+        verbose_name="Usuario"
+    )
+    caja = models.ForeignKey(
+        'Caja', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='turnos',
+        verbose_name="Caja del día"
+    )
+    start_time = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Hora de apertura"
+    )
+    end_time = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Hora de cierre"
+    )
+    initial_cash = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00,
+        verbose_name="Dinero inicial"
+    )
+    final_cash = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name="Dinero final"
+    )
+    expected_cash = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name="Dinero esperado"
+    )
+    difference = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name="Diferencia"
+    )
+    notes = models.TextField(
+        blank=True,
+        verbose_name="Observaciones"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Turno activo"
+    )
+    closed_by = models.ForeignKey(
+        'users.User', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='turnos_cerrados',
+        verbose_name="Cerrado por"
+    )
+
+    class Meta:
+        verbose_name = "Turno"
+        verbose_name_plural = "Turnos"
+        ordering = ['-start_time']
+
+    def __str__(self):
+        status = "Activo" if self.is_active else "Cerrado"
+        return f"Turno de {self.user.get_full_name()} - {self.start_time.strftime('%d/%m/%Y %H:%M')} ({status})"
+
+    def calculate_expected_cash(self):
+        """Calcula el dinero esperado basado en ventas en efectivo durante el turno"""
+        from decimal import Decimal
+        
+        if not self.start_time:
+            return Decimal('0')
+        
+        end = self.end_time or timezone.now()
+        
+        # Tickets pagados en efectivo durante el turno
+        tickets_cash = ParkingTicket.objects.all_tenants().filter(
+            tenant=self.tenant,
+            exit_time__gte=self.start_time,
+            exit_time__lte=end,
+            exit_time__isnull=False,
+            amount_paid__isnull=False,
+            payment_method__payment_type='cash'
+        ).aggregate(total=models.Sum('amount_paid'))['total'] or Decimal('0')
+        
+        # Tickets sin método de pago (asumimos efectivo)
+        tickets_no_method = ParkingTicket.objects.all_tenants().filter(
+            tenant=self.tenant,
+            exit_time__gte=self.start_time,
+            exit_time__lte=end,
+            exit_time__isnull=False,
+            amount_paid__isnull=False,
+            payment_method__isnull=True
+        ).aggregate(total=models.Sum('amount_paid'))['total'] or Decimal('0')
+        
+        # Pagos de contratos en efectivo
+        from monthly_contracts.models import ContractPayment
+        contracts_cash = ContractPayment.objects.filter(
+            tenant=self.tenant,
+            payment_date__gte=self.start_time,
+            payment_date__lte=end,
+            is_confirmed=True,
+            payment_method__payment_type='cash'
+        ).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
+        
+        return self.initial_cash + tickets_cash + tickets_no_method + contracts_cash
+
+    def get_sales_summary(self):
+        """Obtiene resumen de ventas del turno"""
+        from decimal import Decimal
+        from collections import defaultdict
+        
+        if not self.start_time:
+            return {}
+        
+        end = self.end_time or timezone.now()
+        
+        # Tickets del turno
+        tickets = ParkingTicket.objects.all_tenants().filter(
+            tenant=self.tenant,
+            exit_time__gte=self.start_time,
+            exit_time__lte=end,
+            exit_time__isnull=False,
+            amount_paid__isnull=False
+        ).select_related('payment_method')
+        
+        # Pagos de contratos del turno
+        from monthly_contracts.models import ContractPayment
+        contract_payments = ContractPayment.objects.filter(
+            tenant=self.tenant,
+            payment_date__gte=self.start_time,
+            payment_date__lte=end,
+            is_confirmed=True
+        ).select_related('payment_method')
+        
+        # Agrupar por método de pago
+        by_method = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
+        
+        for t in tickets:
+            method = t.payment_method.name if t.payment_method else 'Efectivo'
+            by_method[method]['count'] += 1
+            by_method[method]['total'] += t.amount_paid or Decimal('0')
+        
+        for p in contract_payments:
+            method = p.payment_method.name if p.payment_method else 'Efectivo'
+            by_method[method]['count'] += 1
+            by_method[method]['total'] += p.amount or Decimal('0')
+        
+        return {
+            'tickets_count': tickets.count(),
+            'tickets_total': sum(t.amount_paid or 0 for t in tickets),
+            'contracts_count': contract_payments.count(),
+            'contracts_total': sum(p.amount for p in contract_payments),
+            'by_method': dict(by_method),
+            'total': sum(t.amount_paid or 0 for t in tickets) + sum(p.amount for p in contract_payments)
+        }
+    
+    def get_or_create_caja(self):
+        """Obtiene o crea la caja del día para este turno"""
+        from decimal import Decimal
+        
+        fecha = self.start_time.date() if self.start_time else timezone.now().date()
+        
+        caja, created = Caja.objects.get_or_create(
+            tenant=self.tenant,
+            fecha=fecha,
+            tipo='Ingreso',
+            defaults={
+                'dinero_inicial': Decimal('0'),
+                'monto': Decimal('0'),
+                'descripcion': f'Caja del {fecha}'
+            }
+        )
+        return caja
+
+
 class CashMovement(TenantModel):
     """
     Movimientos de caja manuales (ingresos/egresos adicionales).

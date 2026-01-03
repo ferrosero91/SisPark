@@ -116,6 +116,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 # Custom context processors
                 'tenants.context_processors.tenant_context',
+                'parking.context_processors.turno_context',
             ],
         },
     },

@@ -81,11 +81,14 @@ def contract_create(request):
             category_ids = request.POST.getlist('vehicle_category')
             rates = request.POST.getlist('vehicle_rate')
             
+            total_rate = Decimal('0')
+            vehicles_added = 0
+            
             for i, vehicle_id in enumerate(vehicle_ids):
                 if vehicle_id:
                     try:
                         vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
-                        category = VehicleCategory.objects.get(pk=category_ids[i]) if i < len(category_ids) else None
+                        category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
                         rate = Decimal(rates[i]) if i < len(rates) and rates[i] else Decimal('0')
                         
                         ContractVehicle.objects.create(
@@ -94,10 +97,19 @@ def contract_create(request):
                             category=category,
                             monthly_rate=rate
                         )
-                    except (ThirdPartyVehicle.DoesNotExist, VehicleCategory.DoesNotExist, ValueError):
+                        total_rate += rate
+                        vehicles_added += 1
+                    except (ThirdPartyVehicle.DoesNotExist, VehicleCategory.DoesNotExist, ValueError) as e:
+                        print(f"Error procesando vehículo: {e}")
                         continue
             
-            messages.success(request, 'Contrato creado exitosamente')
+            # El monthly_rate se calcula automáticamente como property
+            # basado en use_combo_rate/combo_rate o suma de vehículos
+            
+            if vehicles_added == 0:
+                messages.warning(request, 'Contrato creado pero sin vehículos. Agregue vehículos desde el detalle.')
+            else:
+                messages.success(request, f'Contrato creado con {vehicles_added} vehículo(s)')
             return redirect('contract_detail', pk=contract.pk)
     else:
         # Valores iniciales
@@ -186,7 +198,7 @@ def contract_edit(request, pk):
                 if vehicle_id:
                     try:
                         vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
-                        category = VehicleCategory.objects.get(pk=category_ids[i]) if i < len(category_ids) else None
+                        category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
                         rate = Decimal(rates[i]) if i < len(rates) and rates[i] else Decimal('0')
                         
                         ContractVehicle.objects.create(
@@ -257,8 +269,9 @@ def contract_payment(request, pk):
     payment_year = request.GET.get('year')
     
     if payment_month and payment_year:
-        payment_month = int(payment_month)
-        payment_year = int(payment_year)
+        # Limpiar separadores de miles (ej: 2.025 -> 2025)
+        payment_month = int(str(payment_month).replace('.', '').replace(',', ''))
+        payment_year = int(str(payment_year).replace('.', '').replace(',', ''))
     else:
         last_payment = contract.payments.filter(is_confirmed=True).order_by('-payment_year', '-payment_month').first()
         
@@ -473,7 +486,7 @@ def add_contract_vehicle(request, pk):
         
         try:
             vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
-            category = VehicleCategory.objects.get(pk=category_id)
+            category = VehicleCategory.objects.all_tenants().get(pk=category_id, tenant=tenant)
             
             ContractVehicle.objects.create(
                 contract=contract,
