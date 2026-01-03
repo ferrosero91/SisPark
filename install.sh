@@ -139,9 +139,34 @@ docker-compose build
 echo -e "${YELLOW}[6/7] Iniciando servicios...${NC}"
 docker-compose up -d
 
-# Esperar servicios
+# Esperar que los contenedores estén listos
 echo "Esperando que los servicios estén listos..."
-sleep 25
+echo "(Las migraciones se ejecutan automáticamente en el contenedor)"
+
+# Esperar hasta 120 segundos a que el contenedor web esté healthy
+MAX_WAIT=120
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    STATUS=$(docker inspect --format='{{.State.Health.Status}}' solupark_web 2>/dev/null || echo "starting")
+    
+    if [ "$STATUS" = "healthy" ]; then
+        echo -e "${GREEN}Contenedor web está listo${NC}"
+        break
+    elif [ "$STATUS" = "unhealthy" ]; then
+        echo -e "${RED}Error: El contenedor web falló${NC}"
+        docker-compose logs web
+        exit 1
+    fi
+    
+    echo "Estado: $STATUS - esperando... ($WAITED/$MAX_WAIT segundos)"
+    sleep 5
+    WAITED=$((WAITED + 5))
+done
+
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo -e "${YELLOW}Timeout esperando health check, verificando logs...${NC}"
+    docker-compose logs --tail=50 web
+fi
 
 # Verificar que los contenedores estén corriendo
 if ! docker-compose ps | grep -q "Up"; then
@@ -150,12 +175,7 @@ if ! docker-compose ps | grep -q "Up"; then
     exit 1
 fi
 
-# Migraciones y static
-echo "Ejecutando migraciones..."
-docker-compose exec -T web python manage.py migrate --noinput
-
-echo "Recolectando archivos estáticos..."
-docker-compose exec -T web python manage.py collectstatic --noinput
+echo -e "${GREEN}Servicios iniciados correctamente${NC}"
 
 # ===========================================
 # 7. Configurar Nginx del sistema
