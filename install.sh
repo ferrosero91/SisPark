@@ -90,6 +90,7 @@ DB_USER=solupark
 DB_PASSWORD=${DB_PASSWORD}
 DB_HOST=db
 DB_PORT=5432
+DB_SSL_MODE=disable
 
 # Variable para PostgreSQL container
 POSTGRES_PASSWORD=${DB_PASSWORD}
