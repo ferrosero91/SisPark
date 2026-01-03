@@ -226,6 +226,8 @@ def tenant_change_password(request, pk):
 @superadmin_required
 def subscription_plans(request):
     """Lista de planes de suscripción"""
+    from django.db.models import ProtectedError
+    
     plans = SubscriptionPlan.objects.all()
     
     if request.method == 'POST':
@@ -245,6 +247,16 @@ def subscription_plans(request):
             )
             messages.success(request, f'Plan "{name}" creado exitosamente')
         
+        elif action == 'edit':
+            plan_id = request.POST.get('plan_id')
+            plan = get_object_or_404(SubscriptionPlan, pk=plan_id)
+            plan.name = request.POST.get('name')
+            plan.price = request.POST.get('price')
+            plan.billing_cycle = request.POST.get('billing_cycle')
+            plan.description = request.POST.get('description', '')
+            plan.save()
+            messages.success(request, f'Plan "{plan.name}" actualizado')
+        
         elif action == 'toggle':
             plan_id = request.POST.get('plan_id')
             plan = get_object_or_404(SubscriptionPlan, pk=plan_id)
@@ -257,8 +269,11 @@ def subscription_plans(request):
             plan_id = request.POST.get('plan_id')
             plan = get_object_or_404(SubscriptionPlan, pk=plan_id)
             plan_name = plan.name
-            plan.delete()
-            messages.success(request, f'Plan "{plan_name}" eliminado')
+            try:
+                plan.delete()
+                messages.success(request, f'Plan "{plan_name}" eliminado')
+            except ProtectedError:
+                messages.error(request, f'No se puede eliminar el plan "{plan_name}" porque tiene pagos asociados. Puede desactivarlo en su lugar.')
         
         return redirect('superadmin:subscription_plans')
     
