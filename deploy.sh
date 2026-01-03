@@ -9,7 +9,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-APP_DIR="/opt/solupark"
+APP_DIR="/var/www/solupark"
 cd $APP_DIR
 
 echo -e "${YELLOW}[1/4] Actualizando código...${NC}"

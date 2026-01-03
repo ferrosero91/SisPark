@@ -16,7 +16,7 @@ NC='\033[0m'
 # Variables
 APP_NAME="solupark"
 DOMAIN="solupark.gestionxpress.app"
-APP_DIR="/opt/$APP_NAME"
+APP_DIR="/var/www/$APP_NAME"
 
 echo -e "${BLUE}=========================================${NC}"
 echo -e "${BLUE}   SoluPark - Instalación Automática    ${NC}"
@@ -55,21 +55,32 @@ else
 fi
 
 # ===========================================
-# 3. Crear directorio y copiar archivos
+# 3. Configurar directorio
 # ===========================================
 echo -e "${YELLOW}[3/7] Configurando directorio...${NC}"
-mkdir -p $APP_DIR
-mkdir -p $APP_DIR/staticfiles
-mkdir -p $APP_DIR/media
-mkdir -p $APP_DIR/logs
 
-# Copiar archivos si estamos en otro directorio
+# Si el script se ejecuta desde el directorio clonado
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ "$SCRIPT_DIR" != "$APP_DIR" ]; then
-    cp -r "$SCRIPT_DIR"/* $APP_DIR/
+
+# Si ya estamos en /var/www/solupark, usar ese directorio
+if [ "$SCRIPT_DIR" = "$APP_DIR" ]; then
+    echo -e "${GREEN}Ya estamos en $APP_DIR${NC}"
+else
+    # Si estamos en otro lugar, mover/copiar a /var/www/solupark
+    if [ -d "$APP_DIR" ]; then
+        echo -e "${YELLOW}El directorio $APP_DIR ya existe${NC}"
+    else
+        echo -e "${YELLOW}Copiando archivos a $APP_DIR...${NC}"
+        cp -r "$SCRIPT_DIR" "$APP_DIR"
+    fi
 fi
 
 cd $APP_DIR
+
+# Crear directorios necesarios
+mkdir -p $APP_DIR/staticfiles
+mkdir -p $APP_DIR/media
+mkdir -p $APP_DIR/logs
 
 # ===========================================
 # 4. Configurar variables de entorno
@@ -110,9 +121,9 @@ EOF
     
     echo -e "${GREEN}.env.production creado${NC}"
     echo -e "${YELLOW}DB Password: ${DB_PASSWORD}${NC}"
+    echo -e "${YELLOW}¡Guarda este password en un lugar seguro!${NC}"
 else
-    echo -e "${GREEN}.env.production existe${NC}"
-    # Cargar password existente
+    echo -e "${GREEN}.env.production ya existe${NC}"
     DB_PASSWORD=$(grep DB_PASSWORD .env.production | cut -d '=' -f2)
 fi
 
@@ -129,17 +140,30 @@ echo -e "${YELLOW}[6/7] Iniciando servicios...${NC}"
 docker-compose up -d
 
 # Esperar servicios
-echo "Esperando servicios..."
-sleep 20
+echo "Esperando que los servicios estén listos..."
+sleep 25
+
+# Verificar que los contenedores estén corriendo
+if ! docker-compose ps | grep -q "Up"; then
+    echo -e "${RED}Error: Los contenedores no iniciaron correctamente${NC}"
+    docker-compose logs
+    exit 1
+fi
 
 # Migraciones y static
+echo "Ejecutando migraciones..."
 docker-compose exec -T web python manage.py migrate --noinput
+
+echo "Recolectando archivos estáticos..."
 docker-compose exec -T web python manage.py collectstatic --noinput
 
 # ===========================================
-# 6. Configurar Nginx del sistema
+# 7. Configurar Nginx del sistema
 # ===========================================
 echo -e "${YELLOW}[7/7] Configurando Nginx...${NC}"
+
+# Actualizar rutas en la configuración de nginx
+sed -i "s|/opt/solupark|$APP_DIR|g" $APP_DIR/nginx/solupark.conf
 
 if [ -f "/etc/nginx/sites-available/solupark" ]; then
     echo -e "${YELLOW}Configuración Nginx existe, respaldando...${NC}"
@@ -153,11 +177,16 @@ if [ ! -L "/etc/nginx/sites-enabled/solupark" ]; then
     ln -s /etc/nginx/sites-available/solupark /etc/nginx/sites-enabled/solupark
 fi
 
-# Verificar configuración
-nginx -t
+# Verificar configuración de nginx
+if nginx -t; then
+    echo -e "${GREEN}Configuración de Nginx válida${NC}"
+else
+    echo -e "${RED}Error en configuración de Nginx${NC}"
+    exit 1
+fi
 
 # ===========================================
-# 7. SSL con Certbot
+# SSL con Certbot
 # ===========================================
 echo ""
 echo -e "${YELLOW}¿Configurar SSL con Certbot? (s/n)${NC}"
@@ -170,26 +199,26 @@ if [ "$SETUP_SSL" = "s" ] || [ "$SETUP_SSL" = "S" ]; then
         apt-get install -y certbot python3-certbot-nginx
     fi
     
-    # Temporalmente usar config sin SSL
-    cat > /etc/nginx/sites-available/solupark << 'NGINX_TEMP'
+    # Temporalmente usar config sin SSL para obtener certificado
+    cat > /etc/nginx/sites-available/solupark << NGINX_TEMP
 server {
     listen 80;
-    server_name solupark.gestionxpress.app;
+    server_name $DOMAIN;
     
     location / {
         proxy_pass http://127.0.0.1:8001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
     location /static/ {
-        alias /opt/solupark/staticfiles/;
+        alias $APP_DIR/staticfiles/;
     }
     
     location /media/ {
-        alias /opt/solupark/media/;
+        alias $APP_DIR/media/;
     }
 }
 NGINX_TEMP
@@ -199,8 +228,10 @@ NGINX_TEMP
     # Obtener certificado
     certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@gestionxpress.app
     
-    # Restaurar config completa
+    # Restaurar config completa con SSL
     cp $APP_DIR/nginx/solupark.conf /etc/nginx/sites-available/solupark
+    
+    echo -e "${GREEN}SSL configurado correctamente${NC}"
 fi
 
 # Recargar Nginx
@@ -226,10 +257,14 @@ echo -e "${GREEN}   ¡Instalación completada!             ${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo -e "URL: ${BLUE}https://${DOMAIN}${NC}"
+echo -e "Directorio: ${BLUE}${APP_DIR}${NC}"
 echo ""
 echo -e "${YELLOW}Comandos útiles:${NC}"
 echo "  cd $APP_DIR"
 echo "  docker-compose logs -f          # Ver logs"
 echo "  docker-compose restart          # Reiniciar"
+echo "  docker-compose down             # Detener"
+echo "  docker-compose up -d            # Iniciar"
 echo "  docker-compose exec web python manage.py shell  # Django shell"
+echo "  docker-compose exec web python manage.py createsuperuser  # Crear admin"
 echo ""
