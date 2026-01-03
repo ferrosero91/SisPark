@@ -125,11 +125,10 @@ else
 fi
 
 # ===========================================
-# 5. Limpiar instalación anterior
+# 5. Detener contenedores anteriores de solupark
 # ===========================================
-echo -e "${YELLOW}[5/8] Limpiando instalación anterior...${NC}"
-docker-compose down -v 2>/dev/null || true
-docker system prune -f 2>/dev/null || true
+echo -e "${YELLOW}[5/8] Deteniendo contenedores anteriores...${NC}"
+docker-compose down 2>/dev/null || true
 
 # ===========================================
 # 6. Construir y levantar contenedores
