@@ -1,6 +1,5 @@
 # ===========================================
 # SoluPark - Docker Compose para Producción
-# Sin Nginx interno - usa Nginx del sistema como proxy
 # ===========================================
 version: '3.8'
 
@@ -16,8 +15,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
-    environment:
-      - DJANGO_SETTINGS_MODULE=parking_system.settings
     ports:
       - "127.0.0.1:8001:8000"
     volumes:
@@ -35,7 +32,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
   # ===========================================
   # Base de Datos PostgreSQL
@@ -44,17 +41,17 @@ services:
     image: postgres:16-alpine
     container_name: solupark_db
     restart: unless-stopped
+    env_file:
+      - .env.production
     environment:
-      POSTGRES_DB: ${DB_NAME:-solupark}
-      POSTGRES_USER: ${DB_USER:-solupark}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: solupark
+      POSTGRES_USER: solupark
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - solupark_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-solupark} -d ${DB_NAME:-solupark}"]
+      test: ["CMD-SHELL", "pg_isready -U solupark -d solupark"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -77,20 +74,11 @@ services:
       timeout: 5s
       retries: 5
 
-# ===========================================
-# Volúmenes
-# ===========================================
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   staticfiles_data:
-    driver: local
 
-# ===========================================
-# Redes
-# ===========================================
 networks:
   solupark_network:
     driver: bridge
