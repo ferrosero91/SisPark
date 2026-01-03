@@ -29,7 +29,7 @@ class ForcePasswordChangeMiddleware:
                 path = request.path
                 if not any(path.startswith(url) for url in self.EXEMPT_URLS):
                     # Redirigir a cambio de contraseña
-                    change_password_url = reverse('users:force_change_password')
+                    change_password_url = reverse('force_change_password')
                     if path != change_password_url:
                         messages.warning(
                             request, 
