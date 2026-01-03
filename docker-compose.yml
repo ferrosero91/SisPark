@@ -21,8 +21,8 @@ services:
     ports:
       - "127.0.0.1:8001:8000"
     volumes:
-      - ./staticfiles:/app/staticfiles
       - ./media:/app/media
+      - staticfiles_data:/app/staticfiles
     depends_on:
       db:
         condition: service_healthy
@@ -84,6 +84,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  staticfiles_data:
     driver: local
 
 # ===========================================

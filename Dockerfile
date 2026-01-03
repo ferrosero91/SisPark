@@ -23,40 +23,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     curl \
     netcat-openbsd \
-    gosu \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
-
-# Crear usuario no-root
-RUN groupadd -r solupark && useradd -r -g solupark solupark
 
 # Copiar requirements e instalar dependencias
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código fuente
-COPY --chown=solupark:solupark . .
+COPY . .
 
 # Copiar y dar permisos al entrypoint
-COPY --chown=solupark:solupark docker/entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Crear directorios necesarios con permisos correctos
-RUN mkdir -p /app/staticfiles /app/media /app/logs \
-    && chown -R solupark:solupark /app
-
-# NO cambiar a usuario no-root aquí - lo haremos en entrypoint después de collectstatic
-# USER solupark
+# Crear directorios necesarios
+RUN mkdir -p /app/staticfiles /app/media
 
 # Exponer puerto
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health/ || exit 1
 
 # Entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Comando por defecto
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--threads", "2", "--worker-class", "gthread", "--worker-tmp-dir", "/dev/shm", "--access-logfile", "-", "--error-logfile", "-", "--capture-output", "--enable-stdio-inheritance", "parking_system.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "2", "--worker-class", "gthread", "--worker-tmp-dir", "/dev/shm", "--access-logfile", "-", "--error-logfile", "-", "parking_system.wsgi:application"]

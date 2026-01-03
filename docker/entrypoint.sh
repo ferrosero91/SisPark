@@ -9,33 +9,28 @@ echo "=== SoluPark Starting ==="
 
 # Esperar a que PostgreSQL esté listo
 echo "Esperando a PostgreSQL..."
-while ! nc -z db 5432; do
-    sleep 1
+until nc -z db 5432; do
+    echo "PostgreSQL no disponible, esperando..."
+    sleep 2
 done
 echo "PostgreSQL está listo!"
 
 # Esperar a que Redis esté listo
 echo "Esperando a Redis..."
-while ! nc -z redis 6379; do
-    sleep 1
+until nc -z redis 6379; do
+    echo "Redis no disponible, esperando..."
+    sleep 2
 done
 echo "Redis está listo!"
 
-# Arreglar permisos de directorios montados (ejecutar como root)
-echo "Configurando permisos..."
-chown -R solupark:solupark /app/staticfiles /app/media 2>/dev/null || true
-
-# Ejecutar migraciones como root (para evitar problemas de permisos)
+# Ejecutar migraciones
 echo "Ejecutando migraciones..."
 python manage.py migrate --noinput
 
 # Recolectar archivos estáticos
 echo "Recolectando archivos estáticos..."
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput --clear
 
-# Arreglar permisos después de collectstatic
-chown -R solupark:solupark /app/staticfiles /app/media 2>/dev/null || true
-
-# Ejecutar comando como usuario solupark
-echo "Iniciando aplicación como usuario solupark..."
-exec gosu solupark "$@"
+# Ejecutar comando pasado como argumento
+echo "Iniciando Gunicorn..."
+exec "$@"
