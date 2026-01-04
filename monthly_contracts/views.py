@@ -142,38 +142,50 @@ def contract_detail(request, pk):
     # Calcular totales
     total_paid = payments.filter(is_confirmed=True).aggregate(total=Sum('amount'))['total'] or Decimal('0')
     
-    # Generar historial de meses desde el inicio del contrato hasta hoy (máximo 12)
+    # Generar historial de meses desde el inicio del contrato
     today = timezone.now().date()
     contract_start = contract.start_date
     
+    # Encontrar el último mes pagado
+    last_payment = payments.filter(is_confirmed=True).order_by('-payment_year', '-payment_month').first()
+    
+    # Determinar hasta qué mes mostrar (el mayor entre: mes actual, último pago, o fin de contrato)
+    end_month = today.month
+    end_year = today.year
+    
+    if last_payment:
+        if (last_payment.payment_year > end_year) or \
+           (last_payment.payment_year == end_year and last_payment.payment_month > end_month):
+            end_month = last_payment.payment_month
+            end_year = last_payment.payment_year
+    
+    # Generar lista de meses desde inicio hasta el mes final
     months_history = []
     
-    # Empezar desde el mes actual e ir hacia atrás, pero no antes del inicio del contrato
-    current_month = today.month
-    current_year = today.year
+    current_month = contract_start.month
+    current_year = contract_start.year
     
-    for i in range(12):
-        month = current_month - i
-        year = current_year
-        if month <= 0:
-            month += 12
-            year -= 1
+    # Máximo 12 meses
+    for _ in range(12):
+        # No pasar del mes final
+        if (current_year > end_year) or \
+           (current_year == end_year and current_month > end_month):
+            break
         
-        # No mostrar meses anteriores al inicio del contrato
-        month_date = timezone.datetime(year, month, 1).date()
-        contract_start_month = timezone.datetime(contract_start.year, contract_start.month, 1).date()
-        
-        if month_date < contract_start_month:
-            continue
-        
-        payment = payments.filter(payment_month=month, payment_year=year).first()
+        payment = payments.filter(payment_month=current_month, payment_year=current_year).first()
         months_history.append({
-            'month': month,
-            'year': year,
-            'month_name': ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][month],
-            'paid': payment is not None,
+            'month': current_month,
+            'year': current_year,
+            'month_name': ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][current_month],
+            'paid': payment is not None and payment.is_confirmed,
             'payment': payment
         })
+        
+        # Avanzar al siguiente mes
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
     
     return render(request, 'monthly_contracts/detail.html', {
         'contract': contract,
