@@ -23,11 +23,11 @@ class VehicleCategory(TenantModel):
     """
     name = models.CharField(max_length=50, verbose_name="Nombre")
     first_hour_rate = models.DecimalField(
-        max_digits=6, decimal_places=2, default=0,
+        max_digits=8, decimal_places=2, default=0,
         verbose_name="Tarifa primera hora"
     )
     additional_hour_rate = models.DecimalField(
-        max_digits=6, decimal_places=2, default=0,
+        max_digits=8, decimal_places=2, default=0,
         verbose_name="Tarifa hora adicional"
     )
     is_monthly = models.BooleanField(default=False, verbose_name="Es mensualidad")

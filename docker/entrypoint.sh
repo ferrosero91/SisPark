@@ -35,6 +35,10 @@ python manage.py collectstatic --noinput --clear
 echo "Verificando superusuario..."
 python manage.py create_default_superuser
 
+# Cargar módulos de permisos si no existen
+echo "Verificando módulos de permisos..."
+python manage.py loaddata permissions/fixtures/modules.json 2>/dev/null || echo "Módulos ya cargados o error al cargar"
+
 # Ejecutar comando pasado como argumento
 echo "Iniciando Gunicorn..."
 exec "$@"
