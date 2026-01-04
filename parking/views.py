@@ -1490,6 +1490,13 @@ def export_cash_register_excel(request):
         is_confirmed=True
     ).select_related('payment_method', 'contract', 'contract__third_party')
     
+    # Obtener gastos
+    from .models import Expense
+    expenses = Expense.objects.all_tenants().filter(
+        tenant=tenant,
+        date=report_date
+    ).select_related('category', 'created_by').order_by('-created_at')
+    
     # Crear workbook
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1499,6 +1506,7 @@ def export_cash_register_excel(request):
     header_font = Font(bold=True, size=14)
     subheader_font = Font(bold=True, size=11)
     header_fill = PatternFill(start_color="0EA5E9", end_color="0EA5E9", fill_type="solid")
+    expense_fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")
     header_font_white = Font(bold=True, color="FFFFFF")
     border = Border(
         left=Side(style='thin'),
@@ -1530,6 +1538,7 @@ def export_cash_register_excel(request):
         cell.fill = header_fill
         cell.border = border
     
+    total_tickets = 0
     for ticket in tickets:
         row += 1
         ws.cell(row=row, column=1, value=ticket.placa).border = border
@@ -1538,6 +1547,11 @@ def export_cash_register_excel(request):
         ws.cell(row=row, column=4, value=ticket.exit_time.strftime('%H:%M') if ticket.exit_time else '').border = border
         ws.cell(row=row, column=5, value=ticket.payment_method.name if ticket.payment_method else 'Efectivo').border = border
         ws.cell(row=row, column=6, value=float(ticket.amount_paid or 0)).border = border
+        total_tickets += float(ticket.amount_paid or 0)
+    
+    row += 1
+    ws.cell(row=row, column=5, value="TOTAL:").font = Font(bold=True)
+    ws.cell(row=row, column=6, value=total_tickets).font = Font(bold=True)
     
     # Pagos de mensualidades
     row += 2
@@ -1552,18 +1566,66 @@ def export_cash_register_excel(request):
         cell.fill = header_fill
         cell.border = border
     
+    total_contracts = 0
     for payment in contract_payments:
         row += 1
         ws.cell(row=row, column=1, value=str(payment.contract.third_party) if payment.contract and payment.contract.third_party else '').border = border
         ws.cell(row=row, column=2, value=payment.contract.vehicles_list if payment.contract else '').border = border
         ws.cell(row=row, column=3, value=payment.payment_method.name if payment.payment_method else '').border = border
         ws.cell(row=row, column=4, value=float(payment.amount or 0)).border = border
+        total_contracts += float(payment.amount or 0)
+    
+    row += 1
+    ws.cell(row=row, column=3, value="TOTAL:").font = Font(bold=True)
+    ws.cell(row=row, column=4, value=total_contracts).font = Font(bold=True)
+    
+    # Gastos
+    row += 2
+    ws[f'A{row}'] = "GASTOS / EGRESOS"
+    ws[f'A{row}'].font = subheader_font
+    
+    row += 1
+    headers = ['Hora', 'Categoría', 'Descripción', 'Registrado por', 'Monto']
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=row, column=col, value=header)
+        cell.font = header_font_white
+        cell.fill = expense_fill
+        cell.border = border
+    
+    total_expenses = 0
+    for expense in expenses:
+        row += 1
+        ws.cell(row=row, column=1, value=expense.created_at.strftime('%H:%M')).border = border
+        ws.cell(row=row, column=2, value=expense.category.name).border = border
+        ws.cell(row=row, column=3, value=expense.description).border = border
+        ws.cell(row=row, column=4, value=expense.created_by.get_full_name() if expense.created_by else '').border = border
+        ws.cell(row=row, column=5, value=float(expense.amount)).border = border
+        total_expenses += float(expense.amount)
+    
+    row += 1
+    ws.cell(row=row, column=4, value="TOTAL GASTOS:").font = Font(bold=True, color="DC2626")
+    ws.cell(row=row, column=5, value=total_expenses).font = Font(bold=True, color="DC2626")
+    
+    # Resumen final
+    row += 2
+    ws[f'A{row}'] = "RESUMEN"
+    ws[f'A{row}'].font = subheader_font
+    
+    row += 1
+    ws.cell(row=row, column=1, value="Total Ingresos:").border = border
+    ws.cell(row=row, column=2, value=total_tickets + total_contracts).border = border
+    row += 1
+    ws.cell(row=row, column=1, value="Total Gastos:").border = border
+    ws.cell(row=row, column=2, value=total_expenses).font = Font(color="DC2626")
+    row += 1
+    ws.cell(row=row, column=1, value="NETO:").font = Font(bold=True)
+    ws.cell(row=row, column=2, value=total_tickets + total_contracts - total_expenses).font = Font(bold=True)
     
     # Ajustar anchos
     ws.column_dimensions['A'].width = 15
     ws.column_dimensions['B'].width = 20
-    ws.column_dimensions['C'].width = 12
-    ws.column_dimensions['D'].width = 12
+    ws.column_dimensions['C'].width = 25
+    ws.column_dimensions['D'].width = 18
     ws.column_dimensions['E'].width = 15
     ws.column_dimensions['F'].width = 12
     
@@ -1614,6 +1676,13 @@ def export_cash_register_pdf(request):
         payment_date__lt=end_date,
         is_confirmed=True
     ).select_related('payment_method', 'contract', 'contract__third_party')
+    
+    # Obtener gastos
+    from .models import Expense
+    expenses = Expense.objects.all_tenants().filter(
+        tenant=tenant,
+        date=report_date
+    ).select_related('category', 'created_by').order_by('-created_at')
     
     # Crear PDF
     buffer = BytesIO()
@@ -1696,8 +1765,56 @@ def export_cash_register_pdf(request):
     elements.append(contract_table)
     elements.append(Spacer(1, 20))
     
-    # Total general
-    elements.append(Paragraph(f"TOTAL GENERAL: ${total_tickets + total_contracts:,.0f}", styles['Heading2']))
+    # Tabla de gastos
+    elements.append(Paragraph("Gastos / Egresos", styles['Heading3']))
+    
+    expense_data = [['Hora', 'Categoría', 'Descripción', 'Monto']]
+    total_expenses = 0
+    for expense in expenses:
+        expense_data.append([
+            expense.created_at.strftime('%H:%M'),
+            expense.category.name,
+            expense.description[:25] + '..' if len(expense.description) > 25 else expense.description,
+            f"-${float(expense.amount):,.0f}"
+        ])
+        total_expenses += float(expense.amount)
+    
+    expense_data.append(['', '', 'TOTAL:', f"-${total_expenses:,.0f}"])
+    
+    expense_table = Table(expense_data, colWidths=[0.8*inch, 1.5*inch, 2*inch, 1*inch])
+    expense_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DC2626')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (-1, 1), (-1, -1), colors.HexColor('#DC2626')),
+    ]))
+    elements.append(expense_table)
+    elements.append(Spacer(1, 20))
+    
+    # Resumen
+    elements.append(Paragraph("RESUMEN", styles['Heading3']))
+    summary_data = [
+        ['Concepto', 'Monto'],
+        ['Total Ingresos', f"${total_tickets + total_contracts:,.0f}"],
+        ['Total Gastos', f"-${total_expenses:,.0f}"],
+        ['NETO', f"${total_tickets + total_contracts - total_expenses:,.0f}"],
+    ]
+    summary_table = Table(summary_data, colWidths=[2*inch, 1.5*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E293B')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 12),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    elements.append(summary_table)
     
     doc.build(elements)
     
