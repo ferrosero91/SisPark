@@ -142,9 +142,13 @@ def contract_detail(request, pk):
     # Calcular totales
     total_paid = payments.filter(is_confirmed=True).aggregate(total=Sum('amount'))['total'] or Decimal('0')
     
-    # Generar historial de meses (últimos 12 meses)
+    # Generar historial de meses desde el inicio del contrato hasta hoy (máximo 12)
     today = timezone.now().date()
+    contract_start = contract.start_date
+    
     months_history = []
+    
+    # Empezar desde el mes actual e ir hacia atrás, pero no antes del inicio del contrato
     current_month = today.month
     current_year = today.year
     
@@ -154,6 +158,13 @@ def contract_detail(request, pk):
         if month <= 0:
             month += 12
             year -= 1
+        
+        # No mostrar meses anteriores al inicio del contrato
+        month_date = timezone.datetime(year, month, 1).date()
+        contract_start_month = timezone.datetime(contract_start.year, contract_start.month, 1).date()
+        
+        if month_date < contract_start_month:
+            continue
         
         payment = payments.filter(payment_month=month, payment_year=year).first()
         months_history.append({
