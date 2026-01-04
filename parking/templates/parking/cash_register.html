@@ -1,5 +1,6 @@
 {% extends 'parking/base.html' %}
 {% load humanize %}
+{% load number_filters %}
 
 {% block title %}Caja - SoluPark{% endblock %}
 {% block page_title %}Cuadre de Caja{% endblock %}
@@ -44,7 +45,7 @@
                 </div>
                 <div>
                     <p class="text-xs text-slate-500">Parqueadero</p>
-                    <p class="text-lg font-bold text-emerald-600">${{ total_tickets|floatformat:0|intcomma }}</p>
+                    <p class="text-lg font-bold text-emerald-600">{{ total_tickets|format_currency }}</p>
                 </div>
             </div>
         </div>
@@ -55,7 +56,7 @@
                 </div>
                 <div>
                     <p class="text-xs text-slate-500">Mensualidades</p>
-                    <p class="text-lg font-bold text-sky-600">${{ total_contracts|floatformat:0|intcomma }}</p>
+                    <p class="text-lg font-bold text-sky-600">{{ total_contracts|format_currency }}</p>
                 </div>
             </div>
         </div>
@@ -66,7 +67,7 @@
                 </div>
                 <div>
                     <p class="text-xs text-slate-500">Efectivo</p>
-                    <p class="text-lg font-bold text-amber-600">${{ total_cash|floatformat:0|intcomma }}</p>
+                    <p class="text-lg font-bold text-amber-600">{{ total_cash|format_currency }}</p>
                 </div>
             </div>
         </div>
@@ -77,7 +78,7 @@
                 </div>
                 <div>
                     <p class="text-xs text-slate-400">Total Día</p>
-                    <p class="text-lg font-bold">${{ total_all|floatformat:0|intcomma }}</p>
+                    <p class="text-lg font-bold">{{ total_all|format_currency }}</p>
                 </div>
             </div>
         </div>

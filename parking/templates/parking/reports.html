@@ -1,5 +1,6 @@
 {% extends 'parking/base.html' %}
 {% load humanize %}
+{% load number_filters %}
 
 {% block title %}Reportes - SoluPark{% endblock %}
 {% block page_title %}Reportes{% endblock %}
@@ -76,7 +77,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs text-emerald-600 uppercase">Parqueadero</p>
-                    <p class="text-2xl font-bold text-emerald-600">${{ summary.total_revenue|default:0|floatformat:0|intcomma }}</p>
+                    <p class="text-2xl font-bold text-emerald-600">{{ summary.total_revenue|default:0|format_currency }}</p>
                 </div>
                 <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
                     <i class="fas fa-parking text-emerald-600"></i>
@@ -87,7 +88,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs text-sky-600 uppercase">Mensualidades</p>
-                    <p class="text-2xl font-bold text-sky-600">${{ contracts_revenue|floatformat:0|intcomma }}</p>
+                    <p class="text-2xl font-bold text-sky-600">{{ contracts_revenue|format_currency }}</p>
                 </div>
                 <div class="w-10 h-10 bg-sky-100 rounded-lg flex items-center justify-center">
                     <i class="fas fa-file-contract text-sky-600"></i>
@@ -98,7 +99,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs text-amber-600 uppercase">Por Cobrar</p>
-                    <p class="text-2xl font-bold text-amber-600">${{ pending_total|floatformat:0|intcomma }}</p>
+                    <p class="text-2xl font-bold text-amber-600">{{ pending_total|format_currency }}</p>
                 </div>
                 <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
                     <i class="fas fa-exclamation-triangle text-amber-600"></i>
@@ -109,7 +110,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs text-slate-400 uppercase">Total Ingresos</p>
-                    <p class="text-2xl font-bold">${{ total_general|floatformat:0|intcomma }}</p>
+                    <p class="text-2xl font-bold">{{ total_general|format_currency }}</p>
                 </div>
                 <div class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
                     <i class="fas fa-dollar-sign text-white"></i>

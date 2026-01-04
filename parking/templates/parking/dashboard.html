@@ -1,5 +1,6 @@
 {% extends 'parking/base.html' %}
 {% load humanize %}
+{% load number_filters %}
 
 {% block title %}Dashboard - SoluPark{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
@@ -13,7 +14,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs lg:text-sm font-medium text-slate-500">Vehículos Activos</p>
-                    <p class="text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{{ stats.active_vehicles }}</p>
+                    <p class="text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{{ stats.active_vehicles|format_number }}</p>
                 </div>
                 <div class="w-10 h-10 lg:w-12 lg:h-12 bg-primary-100 rounded-xl flex items-center justify-center">
                     <i class="fas fa-parking text-primary-600 text-lg lg:text-xl"></i>
@@ -26,7 +27,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs lg:text-sm font-medium text-slate-500">Vehículos (7 días)</p>
-                    <p class="text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{{ stats.daily.total_vehicles|default:0 }}</p>
+                    <p class="text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{{ stats.daily.total_vehicles|default:0|format_number }}</p>
                 </div>
                 <div class="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                     <i class="fas fa-car text-blue-600 text-lg lg:text-xl"></i>
@@ -39,7 +40,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-xs lg:text-sm font-medium text-slate-500">Ingresos (7 días)</p>
-                    <p class="text-xl lg:text-3xl font-bold text-emerald-600 mt-1">${{ stats.daily.total_revenue|default:0|floatformat:0|intcomma }}</p>
+                    <p class="text-xl lg:text-3xl font-bold text-emerald-600 mt-1">{{ stats.daily.total_revenue|default:0|format_currency }}</p>
                 </div>
                 <div class="w-10 h-10 lg:w-12 lg:h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
                     <i class="fas fa-dollar-sign text-emerald-600 text-lg lg:text-xl"></i>
@@ -128,7 +129,7 @@
                             {% endwith %}
                         </td>
                         <td class="px-4 lg:px-6 py-3 lg:py-4">
-                            <span class="font-bold text-emerald-600 text-sm">${{ vehicle.calculate_current_fee|floatformat:0|intcomma }}</span>
+                            <span class="font-bold text-emerald-600 text-sm">{{ vehicle.calculate_current_fee|format_currency }}</span>
                         </td>
                         <td class="px-4 lg:px-6 py-3 lg:py-4 text-right">
                             <div class="flex items-center justify-end gap-1 lg:gap-2">
@@ -174,7 +175,7 @@
                     <span class="font-medium text-slate-700">{{ stat.category__name }}</span>
                     <div class="text-right">
                         <span class="text-sm text-slate-500">{{ stat.count }} vehículos</span>
-                        <span class="block font-bold text-emerald-600">${{ stat.revenue|default:0|floatformat:0|intcomma }}</span>
+                        <span class="block font-bold text-emerald-600">{{ stat.revenue|default:0|format_currency }}</span>
                     </div>
                 </div>
                 {% empty %}
@@ -193,7 +194,7 @@
                 {% for stat in daily_stats %}
                 <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                     <span class="font-medium text-slate-700">{{ stat.date }}</span>
-                    <span class="font-bold text-emerald-600">${{ stat.revenue|floatformat:0|intcomma }}</span>
+                    <span class="font-bold text-emerald-600">{{ stat.revenue|format_currency }}</span>
                 </div>
                 {% empty %}
                 <p class="text-center text-slate-500 py-4">Sin datos</p>
