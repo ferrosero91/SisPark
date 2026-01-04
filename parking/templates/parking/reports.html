@@ -119,8 +119,7 @@
         </div>
     </div>
     
-    <!-- Resumen Gastos y Neto -->
-    {% if total_expenses > 0 %}
+    <!-- Resumen Gastos y Utilidad -->
     <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div class="bg-white rounded-xl border border-red-200 p-4">
             <div class="flex items-center justify-between">
@@ -133,19 +132,18 @@
                 </div>
             </div>
         </div>
-        <div class="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-xl p-4 text-white col-span-2 lg:col-span-2">
+        <div class="bg-gradient-to-br {% if net_total >= 0 %}from-emerald-600 to-emerald-700{% else %}from-red-600 to-red-700{% endif %} rounded-xl p-4 text-white col-span-2 lg:col-span-2">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-xs text-emerald-200 uppercase">Neto (Ingresos - Gastos)</p>
+                    <p class="text-xs {% if net_total >= 0 %}text-emerald-200{% else %}text-red-200{% endif %} uppercase">Utilidad (Ingresos - Gastos)</p>
                     <p class="text-2xl font-bold">{{ net_total|format_currency }}</p>
                 </div>
                 <div class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
-                    <i class="fas fa-balance-scale text-white"></i>
+                    <i class="fas {% if net_total >= 0 %}fa-chart-line{% else %}fa-chart-line-down{% endif %} text-white"></i>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
 
     <!-- Navegación por Tabs -->
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
