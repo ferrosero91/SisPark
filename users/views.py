@@ -60,6 +60,9 @@ def logout_view(request):
 @login_required
 def force_change_password(request):
     """Vista para forzar cambio de contraseña"""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    
     if request.method == 'POST':
         current_password = request.POST.get('current_password', '')
         new_password = request.POST.get('new_password', '')
@@ -70,16 +73,20 @@ def force_change_password(request):
             messages.error(request, 'La contraseña actual es incorrecta')
             return render(request, 'users/force_change_password.html')
         
-        if len(new_password) < 8:
-            messages.error(request, 'La nueva contraseña debe tener al menos 8 caracteres')
-            return render(request, 'users/force_change_password.html')
-        
         if new_password != confirm_password:
             messages.error(request, 'Las contraseñas no coinciden')
             return render(request, 'users/force_change_password.html')
         
         if current_password == new_password:
             messages.error(request, 'La nueva contraseña debe ser diferente a la actual')
+            return render(request, 'users/force_change_password.html')
+        
+        # Validar contraseña con los validadores de Django
+        try:
+            validate_password(new_password, request.user)
+        except ValidationError as e:
+            for error in e.messages:
+                messages.error(request, error)
             return render(request, 'users/force_change_password.html')
         
         # Cambiar contraseña

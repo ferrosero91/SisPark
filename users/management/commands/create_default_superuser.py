@@ -15,13 +15,20 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--password',
-            default='Admin123*',
-            help='Contraseña del superusuario (default: Admin123*)'
+            help='Contraseña del superusuario (si no se proporciona, se genera una aleatoria)'
         )
 
     def handle(self, *args, **options):
+        import secrets
+        import string
+        
         email = options['email']
         password = options['password']
+        
+        # Si no se proporciona contraseña, generar una segura
+        if not password:
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+            password = ''.join(secrets.choice(alphabet) for _ in range(16))
         
         # Verificar si ya existe algún superusuario
         if User.objects.filter(is_superuser=True).exists():
