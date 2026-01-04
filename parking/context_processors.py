@@ -36,9 +36,9 @@ def turno_context(request):
     
     context['turno_activo'] = turno_activo
     
-    # Mostrar alerta si no tiene turno y está en páginas de operación
-    operation_paths = ['/entry/', '/exit/', '/dashboard/']
-    if not turno_activo and any(path in request.path for path in operation_paths):
+    # Mostrar alerta si no tiene turno activo (excepto en ciertas páginas)
+    excluded_paths = ['/login/', '/logout/', '/admin/', '/superadmin/', '/turno/abrir/']
+    if not turno_activo and not any(path in request.path for path in excluded_paths):
         context['show_turno_alert'] = True
     
     return context
