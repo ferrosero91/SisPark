@@ -118,6 +118,34 @@
             </div>
         </div>
     </div>
+    
+    <!-- Resumen Gastos y Neto -->
+    {% if total_expenses > 0 %}
+    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div class="bg-white rounded-xl border border-red-200 p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-red-600 uppercase">Gastos</p>
+                    <p class="text-2xl font-bold text-red-600">{{ total_expenses|format_currency }}</p>
+                </div>
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-arrow-down text-red-600"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-xl p-4 text-white col-span-2 lg:col-span-2">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-emerald-200 uppercase">Neto (Ingresos - Gastos)</p>
+                    <p class="text-2xl font-bold">{{ net_total|format_currency }}</p>
+                </div>
+                <div class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-balance-scale text-white"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Navegación por Tabs -->
     <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -147,6 +175,14 @@
                     <span>Por Cobrar</span>
                     {% if pending_contracts %}
                     <span class="bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full text-xs">{{ pending_contracts|length }}</span>
+                    {% endif %}
+                </button>
+                <button onclick="showReportTab('gastos')" id="tab-gastos" 
+                        class="report-tab flex-shrink-0 px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2">
+                    <i class="fas fa-money-bill-transfer"></i>
+                    <span>Gastos</span>
+                    {% if expenses %}
+                    <span class="bg-red-100 text-red-600 px-2 py-0.5 rounded-full text-xs">{{ expenses|length }}</span>
                     {% endif %}
                 </button>
             </nav>
@@ -572,6 +608,93 @@
                 </div>
                 <p class="text-slate-600 font-medium">¡Todo al día!</p>
                 <p class="text-slate-400 text-sm">No hay contratos vencidos</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Tab: Gastos -->
+        <div id="content-gastos" class="report-content hidden p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <p class="text-xs text-red-600 uppercase">Total Gastos</p>
+                    <p class="text-2xl font-bold text-red-700">${{ total_expenses|floatformat:0|intcomma }}</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p class="text-xs text-slate-600 uppercase">Registros</p>
+                    <p class="text-2xl font-bold text-slate-700">{{ expenses|length }}</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <a href="{% url 'expense_list' %}" class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-slate-600 uppercase">Gestionar Gastos</p>
+                            <p class="text-sm font-medium text-slate-700">Ir a Gastos</p>
+                        </div>
+                        <i class="fas fa-arrow-right text-slate-400"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Gastos por categoría -->
+            {% if expenses_by_category %}
+            <div class="bg-slate-50 rounded-xl p-5 mb-6">
+                <h4 class="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <i class="fas fa-tags text-slate-400"></i>
+                    Gastos por Categoría
+                </h4>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {% for cat_name, cat_data in expenses_by_category.items %}
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-xs text-slate-500 truncate">{{ cat_name }}</p>
+                        <p class="text-lg font-bold text-red-600">${{ cat_data.total|floatformat:0|intcomma }}</p>
+                        <p class="text-xs text-slate-400">{{ cat_data.count }} registro(s)</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if expenses %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50">
+                        <tr class="text-left text-xs font-semibold text-slate-500 uppercase">
+                            <th class="px-4 py-3">Fecha</th>
+                            <th class="px-4 py-3">Categoría</th>
+                            <th class="px-4 py-3">Descripción</th>
+                            <th class="px-4 py-3">Registrado por</th>
+                            <th class="px-4 py-3 text-right">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for expense in expenses %}
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-4 py-3 text-slate-600">
+                                {{ expense.date|date:"d/m/Y" }}
+                                <span class="text-xs text-slate-400 block">{{ expense.created_at|date:"H:i" }}</span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">
+                                    <i class="fas fa-tag"></i> {{ expense.category.name }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-slate-700">{{ expense.description }}</td>
+                            <td class="px-4 py-3 text-slate-600 text-xs">{{ expense.created_by.get_full_name|default:"-" }}</td>
+                            <td class="px-4 py-3 text-right font-bold text-red-600">${{ expense.amount|floatformat:0|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="bg-red-50 border-t-2 border-red-200">
+                        <tr>
+                            <td colspan="4" class="px-4 py-3 font-semibold text-red-700">Total Gastos</td>
+                            <td class="px-4 py-3 text-right font-bold text-red-700 text-lg">${{ total_expenses|floatformat:0|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-receipt text-4xl text-slate-300 mb-3"></i>
+                <p class="text-slate-400">Sin gastos registrados en este período</p>
             </div>
             {% endif %}
         </div>

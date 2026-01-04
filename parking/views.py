@@ -623,6 +623,35 @@ class ReportView(TemplateView):
             'parking_lot': tenant,
             'total_general': float(summary['total_revenue'] or 0) + float(contracts_revenue),
         })
+        
+        # Gastos del período
+        from .models import Expense
+        if tenant:
+            expenses = Expense.objects.all_tenants().filter(
+                tenant=tenant,
+                date__gte=start_date.date(),
+                date__lte=end_date.date()
+            ).select_related('category', 'created_by').order_by('-date', '-created_at')
+            
+            total_expenses = sum(float(e.amount) for e in expenses)
+            
+            # Agrupar gastos por categoría
+            expenses_by_category = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
+            for e in expenses:
+                expenses_by_category[e.category.name]['count'] += 1
+                expenses_by_category[e.category.name]['total'] += e.amount
+        else:
+            expenses = []
+            total_expenses = 0
+            expenses_by_category = {}
+        
+        context.update({
+            'expenses': expenses,
+            'total_expenses': total_expenses,
+            'expenses_by_category': dict(expenses_by_category),
+            'net_total': float(summary['total_revenue'] or 0) + float(contracts_revenue) - total_expenses,
+        })
+        
         return context
 
 
