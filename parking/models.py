@@ -508,3 +508,71 @@ class CashMovement(TenantModel):
 
     def __str__(self):
         return f"{self.get_movement_type_display()} - ${self.amount}"
+
+
+class ExpenseCategory(TenantModel):
+    """Categorías de gastos por tenant."""
+    name = models.CharField(max_length=100, verbose_name="Nombre")
+    description = models.TextField(blank=True, verbose_name="Descripción")
+    is_active = models.BooleanField(default=True, verbose_name="Activa")
+
+    class Meta:
+        verbose_name = "Categoría de Gasto"
+        verbose_name_plural = "Categorías de Gastos"
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'name'],
+                name='unique_expense_category_per_tenant'
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Expense(TenantModel):
+    """Registro de gastos/salidas de dinero."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    category = models.ForeignKey(
+        ExpenseCategory, on_delete=models.PROTECT,
+        related_name='expenses',
+        verbose_name="Categoría"
+    )
+    amount = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        verbose_name="Monto"
+    )
+    description = models.CharField(
+        max_length=255,
+        verbose_name="Descripción"
+    )
+    date = models.DateField(
+        default=timezone.now,
+        verbose_name="Fecha"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de registro"
+    )
+    created_by = models.ForeignKey(
+        'users.User', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='expenses_created',
+        verbose_name="Registrado por"
+    )
+    turno = models.ForeignKey(
+        'Turno', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='expenses',
+        verbose_name="Turno"
+    )
+    notes = models.TextField(blank=True, verbose_name="Notas adicionales")
+
+    class Meta:
+        verbose_name = "Gasto"
+        verbose_name_plural = "Gastos"
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.category.name} - ${self.amount} - {self.date}"

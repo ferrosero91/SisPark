@@ -9,7 +9,8 @@ from parking.views import (
     VehicleEntryView, vehicle_exit, vehicle_payment, print_ticket, print_exit_ticket, ReportView,
     category_edit, cash_register, export_cash_register_excel, export_cash_register_pdf,
     export_report_excel, export_report_pdf,
-    abrir_turno
+    abrir_turno,
+    expense_list, expense_create, expense_delete, expense_category_list
 )
 
 
@@ -56,4 +57,10 @@ urlpatterns = [
     
     # Turno (abrir caja)
     path('turno/abrir/', abrir_turno, name='abrir_turno'),
+    
+    # Gastos
+    path('gastos/', expense_list, name='expense_list'),
+    path('gastos/crear/', expense_create, name='expense_create'),
+    path('gastos/<uuid:pk>/eliminar/', expense_delete, name='expense_delete'),
+    path('gastos/categorias/', expense_category_list, name='expense_category_list'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

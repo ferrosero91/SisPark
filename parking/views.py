@@ -1349,7 +1349,22 @@ def cash_register(request):
 
     # Usar dinero inicial del turno activo si existe
     dinero_inicial_base = float(turno_activo.initial_cash) if turno_activo else float(caja.dinero_inicial)
-    dinero_esperado = dinero_inicial_base + total_cash
+    
+    # Obtener gastos del período
+    from .models import Expense
+    if tenant:
+        expenses = Expense.objects.all_tenants().filter(
+            tenant=tenant,
+            date__gte=start_date.date(),
+            date__lte=(end_date - timedelta(seconds=1)).date()
+        ).select_related('category', 'created_by').order_by('-created_at')
+    else:
+        expenses = Expense.objects.none()
+    
+    total_expenses = sum(float(e.amount) for e in expenses)
+    
+    # Dinero esperado = base + ingresos efectivo - gastos
+    dinero_esperado = dinero_inicial_base + total_cash - total_expenses
 
     if request.method == 'POST' and 'set_dinero_inicial' in request.POST:
         try:
@@ -1434,6 +1449,8 @@ def cash_register(request):
         'diferencia_abs': diferencia_abs,
         'is_vendedor': is_vendedor,
         'tenant': tenant,
+        'expenses': expenses,
+        'total_expenses': total_expenses,
     }
     return render(request, 'parking/cash_register.html', context)
 
@@ -1782,3 +1799,208 @@ def abrir_turno(request):
         'tenant': tenant
     })
 
+
+
+# ========== VISTAS DE GASTOS ==========
+
+@login_required
+def expense_list(request):
+    """Lista de gastos del día o período seleccionado"""
+    tenant = get_tenant_from_user(request.user)
+    today = timezone.now().date()
+    
+    # Filtros de fecha
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
+    
+    if start_date_str and end_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            start_date = end_date = today
+    else:
+        start_date = end_date = today
+    
+    from .models import Expense, ExpenseCategory
+    
+    if tenant:
+        expenses = Expense.objects.all_tenants().filter(
+            tenant=tenant,
+            date__gte=start_date,
+            date__lte=end_date
+        ).select_related('category', 'created_by').order_by('-date', '-created_at')
+        
+        categories = ExpenseCategory.objects.all_tenants().filter(
+            tenant=tenant,
+            is_active=True
+        ).order_by('name')
+    else:
+        expenses = Expense.objects.none()
+        categories = ExpenseCategory.objects.none()
+    
+    # Calcular totales
+    total_expenses = sum(e.amount for e in expenses)
+    
+    # Agrupar por categoría
+    from collections import defaultdict
+    by_category = defaultdict(lambda: {'count': 0, 'total': 0})
+    for e in expenses:
+        by_category[e.category.name]['count'] += 1
+        by_category[e.category.name]['total'] += float(e.amount)
+    
+    context = {
+        'expenses': expenses,
+        'categories': categories,
+        'start_date': start_date,
+        'end_date': end_date,
+        'total_expenses': total_expenses,
+        'by_category': dict(by_category),
+        'tenant': tenant,
+    }
+    return render(request, 'parking/expenses.html', context)
+
+
+@login_required
+def expense_create(request):
+    """Crear un nuevo gasto"""
+    tenant = get_tenant_from_user(request.user)
+    
+    from .models import Expense, ExpenseCategory, Turno
+    
+    # Verificar turno activo
+    turno_activo = None
+    if tenant:
+        turno_activo = Turno.objects.all_tenants().filter(
+            tenant=tenant,
+            user=request.user,
+            is_active=True
+        ).first()
+    
+    if request.method == 'POST':
+        category_id = request.POST.get('category')
+        amount = request.POST.get('amount')
+        description = request.POST.get('description', '').strip()
+        notes = request.POST.get('notes', '').strip()
+        
+        if not category_id or not amount:
+            messages.error(request, 'Categoría y monto son obligatorios.')
+            return redirect('expense_list')
+        
+        try:
+            category = ExpenseCategory.objects.all_tenants().get(
+                pk=category_id,
+                tenant=tenant,
+                is_active=True
+            )
+            amount = float(amount)
+            
+            if amount <= 0:
+                messages.error(request, 'El monto debe ser mayor a cero.')
+                return redirect('expense_list')
+            
+            expense = Expense(
+                category=category,
+                amount=amount,
+                description=description or category.name,
+                notes=notes,
+                created_by=request.user,
+                turno=turno_activo,
+                tenant=tenant
+            )
+            expense.save()
+            
+            messages.success(request, f'Gasto de ${amount:,.0f} registrado correctamente.')
+            return redirect('expense_list')
+            
+        except ExpenseCategory.DoesNotExist:
+            messages.error(request, 'Categoría no válida.')
+        except ValueError:
+            messages.error(request, 'Monto no válido.')
+    
+    return redirect('expense_list')
+
+
+@login_required
+def expense_delete(request, pk):
+    """Eliminar un gasto"""
+    tenant = get_tenant_from_user(request.user)
+    
+    from .models import Expense
+    
+    if request.method == 'POST':
+        try:
+            expense = Expense.objects.all_tenants().get(pk=pk, tenant=tenant)
+            expense.delete()
+            messages.success(request, 'Gasto eliminado correctamente.')
+        except Expense.DoesNotExist:
+            messages.error(request, 'Gasto no encontrado.')
+    
+    return redirect('expense_list')
+
+
+@login_required
+def expense_category_list(request):
+    """Lista y gestión de categorías de gastos"""
+    tenant = get_tenant_from_user(request.user)
+    
+    from .models import ExpenseCategory
+    
+    if tenant:
+        categories = ExpenseCategory.objects.all_tenants().filter(
+            tenant=tenant
+        ).order_by('name')
+    else:
+        categories = ExpenseCategory.objects.none()
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'create':
+            name = request.POST.get('name', '').strip()
+            description = request.POST.get('description', '').strip()
+            
+            if not name:
+                messages.error(request, 'El nombre es obligatorio.')
+            elif ExpenseCategory.objects.all_tenants().filter(tenant=tenant, name__iexact=name).exists():
+                messages.error(request, 'Ya existe una categoría con ese nombre.')
+            else:
+                category = ExpenseCategory(
+                    name=name,
+                    description=description,
+                    tenant=tenant
+                )
+                category.save()
+                messages.success(request, f'Categoría "{name}" creada correctamente.')
+            return redirect('expense_category_list')
+        
+        elif action == 'toggle':
+            category_id = request.POST.get('category_id')
+            try:
+                category = ExpenseCategory.objects.all_tenants().get(pk=category_id, tenant=tenant)
+                category.is_active = not category.is_active
+                category.save()
+                status = 'activada' if category.is_active else 'desactivada'
+                messages.success(request, f'Categoría "{category.name}" {status}.')
+            except ExpenseCategory.DoesNotExist:
+                messages.error(request, 'Categoría no encontrada.')
+            return redirect('expense_category_list')
+        
+        elif action == 'delete':
+            category_id = request.POST.get('category_id')
+            try:
+                category = ExpenseCategory.objects.all_tenants().get(pk=category_id, tenant=tenant)
+                if category.expenses.exists():
+                    messages.error(request, 'No se puede eliminar una categoría con gastos asociados.')
+                else:
+                    category.delete()
+                    messages.success(request, 'Categoría eliminada correctamente.')
+            except ExpenseCategory.DoesNotExist:
+                messages.error(request, 'Categoría no encontrada.')
+            return redirect('expense_category_list')
+    
+    context = {
+        'categories': categories,
+        'tenant': tenant,
+    }
+    return render(request, 'parking/expense_categories.html', context)
