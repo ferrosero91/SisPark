@@ -115,6 +115,20 @@
                 </a>
                 {% endif %}
                 
+                {% if user|can_view:'cash_register' %}
+                <a href="{% url 'cash_register' %}" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg {% if request.resolver_match.url_name == 'cash_register' %}active{% else %}text-slate-300 hover:text-white{% endif %}">
+                    <i class="fas fa-cash-register w-5 text-center"></i>
+                    <span class="sidebar-text font-medium">Caja</span>
+                </a>
+                {% endif %}
+                
+                {% if user|can_view:'expenses' %}
+                <a href="{% url 'expense_list' %}" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg {% if 'expense' in request.resolver_match.url_name %}active{% else %}text-slate-300 hover:text-white{% endif %}">
+                    <i class="fas fa-money-bill-transfer w-5 text-center"></i>
+                    <span class="sidebar-text font-medium">Gastos</span>
+                </a>
+                {% endif %}
+                
                 <p class="sidebar-section-title text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2 mt-4">Reportes</p>
                 
                 {% if user|can_view:'reports' %}
@@ -128,20 +142,6 @@
                 <a href="{% url 'payment_history' %}" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg {% if request.resolver_match.url_name == 'payment_history' %}active{% else %}text-slate-300 hover:text-white{% endif %}">
                     <i class="fas fa-history w-5 text-center"></i>
                     <span class="sidebar-text font-medium">Pagos</span>
-                </a>
-                {% endif %}
-                
-                {% if user|can_view:'cash_register' %}
-                <a href="{% url 'cash_register' %}" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg {% if request.resolver_match.url_name == 'cash_register' %}active{% else %}text-slate-300 hover:text-white{% endif %}">
-                    <i class="fas fa-cash-register w-5 text-center"></i>
-                    <span class="sidebar-text font-medium">Caja</span>
-                </a>
-                {% endif %}
-                
-                {% if user|can_view:'expenses' %}
-                <a href="{% url 'expense_list' %}" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg {% if 'expense' in request.resolver_match.url_name %}active{% else %}text-slate-300 hover:text-white{% endif %}">
-                    <i class="fas fa-money-bill-transfer w-5 text-center"></i>
-                    <span class="sidebar-text font-medium">Gastos</span>
                 </a>
                 {% endif %}
                 
