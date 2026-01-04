@@ -486,7 +486,16 @@ def add_contract_vehicle(request, pk):
         
         try:
             vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
-            category = VehicleCategory.objects.all_tenants().get(pk=category_id, tenant=tenant)
+            # Buscar categoría sin filtro de tenant primero para debug
+            try:
+                category = VehicleCategory.objects.all_tenants().get(pk=category_id)
+                # Verificar que pertenece al tenant
+                if category.tenant_id != tenant.id:
+                    raise VehicleCategory.DoesNotExist(f"Categoría {category_id} no pertenece al tenant {tenant.name}")
+            except VehicleCategory.DoesNotExist:
+                # Listar categorías disponibles para debug
+                available_cats = list(VehicleCategory.objects.all_tenants().filter(tenant=tenant).values_list('id', 'name'))
+                raise VehicleCategory.DoesNotExist(f"Categoría ID={category_id} no encontrada. Disponibles: {available_cats}")
             
             ContractVehicle.objects.create(
                 contract=contract,
