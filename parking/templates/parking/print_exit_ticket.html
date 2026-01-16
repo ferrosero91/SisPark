@@ -7,94 +7,138 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Courier New', monospace;
-            width: 80mm;
-            padding: 4mm;
+            font-family: 'Arial Black', Arial, sans-serif;
+            width: 68mm;
+            max-width: 68mm;
+            margin: 0 auto;
+            padding: 2mm 4mm;
             background: white;
+            font-weight: bold;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         .ticket {
-            border: 2px dashed #333;
-            padding: 5mm;
+            width: 100%;
+            padding-left: 2mm;
+        }
+        .divider {
+            border-bottom: 2px dashed #000;
+            margin: 3mm 0;
+        }
+        .divider-solid {
+            border-bottom: 2px solid #000;
+            margin: 3mm 0;
         }
         .header {
             text-align: center;
-            border-bottom: 2px dashed #333;
-            padding-bottom: 4mm;
-            margin-bottom: 4mm;
+            padding-bottom: 2mm;
         }
-        .parking-name { font-size: 18px; font-weight: bold; }
-        .parking-address { font-size: 11px; margin-top: 2mm; color: #333; }
-        .parking-phone { font-size: 12px; margin-top: 1mm; font-weight: bold; }
-        .ticket-type {
-            background: #10b981;
-            color: white;
-            padding: 3mm 4mm;
-            font-size: 16px;
+        .parking-name { 
+            font-size: 20px; 
+            font-weight: 900; 
+            text-transform: uppercase;
+        }
+        .parking-address { 
+            font-size: 13px; 
+            margin-top: 1mm; 
             font-weight: bold;
+        }
+        .parking-phone { 
+            font-size: 14px; 
+            margin-top: 1mm; 
+            font-weight: 900; 
+        }
+        .ticket-type {
             text-align: center;
-            margin: 4mm 0;
+            font-size: 20px;
+            font-weight: 900;
+            padding: 3mm 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .plate {
+            text-align: center;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            padding: 4mm 0;
+            text-transform: uppercase;
+        }
+        .plate-box {
+            border: 2px solid #000;
+            padding: 2mm;
+            margin: 2mm 0;
         }
         .info-row {
             display: flex;
             justify-content: space-between;
-            font-size: 12px;
-            padding: 2mm 0;
-            border-bottom: 1px dotted #999;
-        }
-        .info-row:last-child { border-bottom: none; }
-        .label { color: #555; }
-        .value { font-weight: bold; }
-        .plate {
-            text-align: center;
-            font-size: 28px;
+            font-size: 14px;
             font-weight: bold;
-            letter-spacing: 3px;
-            padding: 5mm 0;
-            border: 3px solid #000;
-            margin: 4mm 0;
-            background: #f5f5f5;
+            padding: 2mm 0;
+        }
+        .label { 
+            font-weight: bold;
+        }
+        .value { 
+            font-weight: 900; 
+            font-size: 15px;
         }
         .totals {
-            background: #f8fafc;
-            padding: 4mm;
-            margin: 4mm 0;
-            border: 2px solid #e2e8f0;
+            padding: 3mm 0;
         }
         .total-row {
             display: flex;
             justify-content: space-between;
             padding: 2mm 0;
-            font-size: 13px;
+            font-size: 16px;
+            font-weight: bold;
         }
         .total-row.main {
-            font-size: 18px;
-            font-weight: bold;
-            border-top: 2px solid #333;
-            padding-top: 3mm;
-            margin-top: 2mm;
+            font-size: 22px;
+            font-weight: 900;
+            padding: 3mm 0;
         }
         .change-box {
-            background: #10b981;
-            color: white;
-            padding: 4mm;
             text-align: center;
-            margin: 4mm 0;
+            padding: 3mm 0;
+            border: 2px solid #000;
+            margin: 2mm 0;
         }
-        .change-label { font-size: 12px; }
-        .change-amount { font-size: 24px; font-weight: bold; }
+        .change-label { 
+            font-size: 14px; 
+            font-weight: bold;
+        }
+        .change-amount { 
+            font-size: 28px; 
+            font-weight: 900; 
+        }
         .footer {
             text-align: center;
-            font-size: 11px;
-            color: #555;
-            margin-top: 4mm;
-            padding-top: 4mm;
-            border-top: 2px dashed #333;
+            font-size: 12px;
+            font-weight: bold;
+            padding-top: 2mm;
         }
         .footer p { margin: 1mm 0; }
-        .brand { font-size: 9px; color: #999; margin-top: 3mm; }
+        .footer-title { 
+            font-size: 16px; 
+            font-weight: 900; 
+        }
+        .brand { 
+            font-size: 10px; 
+            margin-top: 2mm; 
+        }
         @media print {
-            body { width: 80mm; }
-            .no-print { display: none; }
+            @page {
+                size: 80mm auto;
+                margin: 0;
+            }
+            body { 
+                width: 68mm;
+                max-width: 68mm;
+                margin: 0;
+                padding: 2mm 4mm;
+            }
+            .no-print { display: none !important; }
         }
     </style>
 </head>
@@ -110,16 +154,22 @@
             {% endif %}
         </div>
         
-        <div class="ticket-type">TICKET DE SALIDA</div>
+        <div class="divider"></div>
         
-        <div class="plate">{{ ticket.placa }}</div>
+        <div class="ticket-type">TICKET SALIDA</div>
+        
+        <div class="plate-box">
+            <div class="plate">{{ ticket.placa }}</div>
+        </div>
+        
+        <div class="divider"></div>
         
         <div class="info-row">
             <span class="label">Ticket:</span>
             <span class="value">{{ ticket.ticket_number }}</span>
         </div>
         <div class="info-row">
-            <span class="label">Categoría:</span>
+            <span class="label">Categoria:</span>
             <span class="value">{{ ticket.category.name }}</span>
         </div>
         <div class="info-row">
@@ -131,13 +181,15 @@
             <span class="value">{{ ticket.exit_time|date:"d/m H:i" }}</span>
         </div>
         <div class="info-row">
-            <span class="label">Duración:</span>
+            <span class="label">Duracion:</span>
             <span class="value">{{ duration }}</span>
         </div>
         <div class="info-row">
-            <span class="label">Método pago:</span>
+            <span class="label">Pago:</span>
             <span class="value">{{ ticket.payment_method.name|default:"Efectivo" }}</span>
         </div>
+        
+        <div class="divider-solid"></div>
         
         <div class="totals">
             <div class="total-row main">
@@ -149,37 +201,37 @@
                 <span>Recibido:</span>
                 <span>${{ amount_received|floatformat:0 }}</span>
             </div>
-            <div class="total-row">
-                <span>Cambio:</span>
-                <span>${{ change|floatformat:0 }}</span>
-            </div>
             {% endif %}
         </div>
         
         {% if is_cash and change > 0 %}
         <div class="change-box">
-            <div class="change-label">DEVOLVER AL CLIENTE</div>
+            <div class="change-label">DEVOLVER</div>
             <div class="change-amount">${{ change|floatformat:0 }}</div>
         </div>
         {% endif %}
         
+        <div class="divider"></div>
+        
         <div class="footer">
-            <p><strong>¡Gracias por su visita!</strong></p>
+            <p class="footer-title">GRACIAS POR SU VISITA</p>
             <p>Vuelva pronto</p>
             <p style="margin-top:2mm;">{{ current_time|date:"d/m/Y H:i:s" }}</p>
             <p class="brand">Powered by SoluPark</p>
         </div>
     </div>
     
-    <div class="no-print" style="text-align:center; margin-top:20px;">
+    <div class="no-print" style="text-align:center; margin-top:20px; display:flex; justify-content:center; gap:10px;">
         <button onclick="window.print()" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#10b981; color:white; border:none; border-radius:8px;">
             Imprimir
         </button>
-        <button onclick="window.location.href='{% url 'dashboard' %}'" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#64748b; color:white; border:none; border-radius:8px; margin-left:10px;">
+        <button onclick="window.location.href='{% url 'dashboard' %}'" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#64748b; color:white; border:none; border-radius:8px;">
             Volver
         </button>
     </div>
     
-    <script>window.onload = function() { window.print(); };</script>
+    <script>
+        window.onload = function() { window.print(); };
+    </script>
 </body>
 </html>

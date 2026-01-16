@@ -117,8 +117,17 @@ class ParkingTicket(TenantModel):
     
     def get_barcode_base64(self):
         buffer = BytesIO()
+        # Configurar barras más gruesas para impresoras térmicas
+        options = {
+            'module_width': 0.4,      # Ancho de cada barra (más grueso)
+            'module_height': 12.0,    # Altura del código
+            'quiet_zone': 2.0,        # Zona silenciosa
+            'font_size': 10,          # Tamaño de fuente
+            'text_distance': 3.0,     # Distancia del texto
+            'write_text': False,      # No escribir texto debajo (ya lo ponemos en HTML)
+        }
         code = Code128(self.placa, writer=ImageWriter())
-        code.write(buffer)
+        code.write(buffer, options=options)
         base64_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return f'data:image/png;base64,{base64_data}'
 
