@@ -7,98 +7,144 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Courier New', monospace;
-            width: 80mm;
-            padding: 5mm;
+            font-family: 'Arial Black', Arial, sans-serif;
+            width: 68mm;
+            max-width: 68mm;
+            margin: 0 auto;
+            padding: 2mm 4mm;
             background: white;
+            font-weight: bold;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         .receipt {
-            border: 1px dashed #333;
-            padding: 4mm;
+            width: 100%;
+            padding-left: 2mm;
+        }
+        .divider {
+            border-bottom: 2px dashed #000;
+            margin: 3mm 0;
+        }
+        .divider-solid {
+            border-bottom: 2px solid #000;
+            margin: 3mm 0;
         }
         .header {
             text-align: center;
-            border-bottom: 1px dashed #333;
-            padding-bottom: 3mm;
-            margin-bottom: 3mm;
+            padding-bottom: 2mm;
         }
-        .parking-name { font-size: 14px; font-weight: bold; }
-        .parking-info { font-size: 10px; margin-top: 2mm; }
-        .receipt-type {
-            background: #10b981;
-            color: white;
-            padding: 2mm 4mm;
-            font-size: 14px;
+        .parking-name { 
+            font-size: 20px; 
+            font-weight: 900; 
+            text-transform: uppercase;
+        }
+        .parking-info { 
+            font-size: 13px; 
+            margin-top: 1mm; 
             font-weight: bold;
+        }
+        .receipt-type {
             text-align: center;
-            margin: 3mm 0;
-        }
-        .info-section {
-            margin: 3mm 0;
+            font-size: 18px;
+            font-weight: 900;
             padding: 3mm 0;
-            border-bottom: 1px dotted #ccc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
-        .info-section:last-child { border-bottom: none; }
+        .client-box {
+            border: 2px solid #000;
+            padding: 3mm;
+            margin: 2mm 0;
+            text-align: center;
+        }
+        .client-name {
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+        .vehicles-list {
+            text-align: center;
+            font-size: 16px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            padding: 3mm 0;
+        }
         .section-title {
-            font-size: 10px;
-            color: #666;
+            font-size: 14px;
+            font-weight: 900;
             text-transform: uppercase;
             margin-bottom: 2mm;
+            text-align: center;
         }
         .info-row {
             display: flex;
             justify-content: space-between;
-            font-size: 11px;
-            padding: 1mm 0;
-        }
-        .label { color: #666; }
-        .value { font-weight: bold; }
-        .client-name {
-            text-align: center;
             font-size: 14px;
             font-weight: bold;
-            padding: 3mm 0;
+            padding: 2mm 0;
+        }
+        .label { 
+            font-weight: bold;
+        }
+        .value { 
+            font-weight: 900; 
+            font-size: 15px;
+        }
+        .total-box {
             border: 2px solid #000;
+            padding: 4mm;
+            text-align: center;
             margin: 3mm 0;
         }
-        .vehicles-list {
+        .total-label { 
+            font-size: 14px; 
+            font-weight: bold;
+        }
+        .total-amount { 
+            font-size: 28px; 
+            font-weight: 900; 
+        }
+        .change-box {
+            border: 2px solid #000;
+            padding: 3mm;
+            text-align: center;
+            margin: 3mm 0;
+        }
+        .change-label { 
+            font-size: 14px; 
+            font-weight: bold;
+        }
+        .change-amount { 
+            font-size: 24px; 
+            font-weight: 900; 
+        }
+        .footer {
             text-align: center;
             font-size: 12px;
             font-weight: bold;
-            letter-spacing: 1px;
-            padding: 2mm 0;
-            background: #f1f5f9;
+            padding-top: 2mm;
         }
-        .total-box {
-            background: #f0fdf4;
-            border: 2px solid #10b981;
-            padding: 3mm;
-            text-align: center;
-            margin: 3mm 0;
+        .footer p { margin: 1mm 0; }
+        .footer-title { 
+            font-size: 16px; 
+            font-weight: 900; 
         }
-        .total-label { font-size: 10px; color: #666; }
-        .total-amount { font-size: 24px; font-weight: bold; color: #10b981; }
-        .change-box {
-            background: #10b981;
-            color: white;
-            padding: 3mm;
-            text-align: center;
-            margin: 3mm 0;
+        .brand { 
+            font-size: 10px; 
+            margin-top: 2mm; 
         }
-        .change-label { font-size: 10px; }
-        .change-amount { font-size: 18px; font-weight: bold; }
-        .footer {
-            text-align: center;
-            font-size: 10px;
-            color: #666;
-            margin-top: 3mm;
-            padding-top: 3mm;
-            border-top: 1px dashed #333;
-        }
-        .powered-by { font-size: 9px; color: #999; margin-top: 2mm; }
         @media print {
-            body { width: 80mm; }
-            .no-print { display: none; }
+            @page {
+                size: 80mm auto;
+                margin: 0;
+            }
+            body { 
+                width: 68mm;
+                max-width: 68mm;
+                margin: 0;
+                padding: 2mm 4mm;
+            }
+            .no-print { display: none !important; }
         }
     </style>
 </head>
@@ -114,47 +160,53 @@
             {% endif %}
         </div>
         
-        <div class="receipt-type">RECIBO DE PAGO - MENSUALIDAD</div>
+        <div class="divider"></div>
         
-        <div class="client-name">{{ contract.third_party.full_name }}</div>
+        <div class="receipt-type">RECIBO MENSUALIDAD</div>
         
-        <div class="vehicles-list">{{ contract.vehicles_list|default:"Sin vehículos" }}</div>
-        
-        <div class="info-section">
-            <div class="section-title">Cliente</div>
-            <div class="info-row">
-                <span class="label">Documento:</span>
-                <span class="value">{{ contract.third_party.document_number }}</span>
-            </div>
-            {% if contract.third_party.phone %}
-            <div class="info-row">
-                <span class="label">Teléfono:</span>
-                <span class="value">{{ contract.third_party.phone }}</span>
-            </div>
-            {% endif %}
+        <div class="client-box">
+            <div class="client-name">{{ contract.third_party.full_name }}</div>
         </div>
         
-        <div class="info-section">
-            <div class="section-title">Detalle del Pago</div>
-            <div class="info-row">
-                <span class="label">Fecha:</span>
-                <span class="value">{{ payment.payment_date|date:"d/m/Y H:i" }}</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Período:</span>
-                <span class="value">{{ payment.get_month_name }} {{ payment.payment_year }}</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Método:</span>
-                <span class="value">{% if payment.payment_method %}{{ payment.payment_method.name }}{% else %}Efectivo{% endif %}</span>
-            </div>
-            {% if payment.reference %}
-            <div class="info-row">
-                <span class="label">Referencia:</span>
-                <span class="value">{{ payment.reference }}</span>
-            </div>
-            {% endif %}
+        <div class="vehicles-list">{{ contract.vehicles_list|default:"Sin vehiculos" }}</div>
+        
+        <div class="divider"></div>
+        
+        <div class="section-title">Cliente</div>
+        <div class="info-row">
+            <span class="label">Documento:</span>
+            <span class="value">{{ contract.third_party.document_number }}</span>
         </div>
+        {% if contract.third_party.phone %}
+        <div class="info-row">
+            <span class="label">Telefono:</span>
+            <span class="value">{{ contract.third_party.phone }}</span>
+        </div>
+        {% endif %}
+        
+        <div class="divider"></div>
+        
+        <div class="section-title">Detalle Pago</div>
+        <div class="info-row">
+            <span class="label">Fecha:</span>
+            <span class="value">{{ payment.payment_date|date:"d/m/Y H:i" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Periodo:</span>
+            <span class="value">{{ payment.get_month_name }} {{ payment.payment_year }}</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Metodo:</span>
+            <span class="value">{% if payment.payment_method %}{{ payment.payment_method.name }}{% else %}Efectivo{% endif %}</span>
+        </div>
+        {% if payment.reference %}
+        <div class="info-row">
+            <span class="label">Referencia:</span>
+            <span class="value">{{ payment.reference }}</span>
+        </div>
+        {% endif %}
+        
+        <div class="divider-solid"></div>
         
         <div class="total-box">
             <div class="total-label">TOTAL PAGADO</div>
@@ -162,45 +214,46 @@
         </div>
         
         {% if payment.amount_received and payment.change_amount and payment.change_amount > 0 %}
-        <div class="info-section">
-            <div class="info-row">
-                <span class="label">Recibido:</span>
-                <span class="value">${{ payment.amount_received|floatformat:0 }}</span>
-            </div>
+        <div class="info-row">
+            <span class="label">Recibido:</span>
+            <span class="value">${{ payment.amount_received|floatformat:0 }}</span>
         </div>
         <div class="change-box">
-            <div class="change-label">CAMBIO</div>
+            <div class="change-label">DEVOLVER</div>
             <div class="change-amount">${{ payment.change_amount|floatformat:0 }}</div>
         </div>
         {% endif %}
         
-        <div class="info-section">
-            <div class="section-title">Contrato</div>
-            <div class="info-row">
-                <span class="label">Vigente hasta:</span>
-                <span class="value">{{ contract.end_date|date:"d/m/Y" }}</span>
-            </div>
+        <div class="divider"></div>
+        
+        <div class="info-row">
+            <span class="label">Vigente hasta:</span>
+            <span class="value">{{ contract.end_date|date:"d/m/Y" }}</span>
         </div>
         
+        <div class="divider"></div>
+        
         <div class="footer">
-            <p>¡Gracias por su pago!</p>
+            <p class="footer-title">GRACIAS POR SU PAGO</p>
             {% if payment.received_by %}
-            <p>Atendido por: {{ payment.received_by.get_full_name|default:payment.received_by.username }}</p>
+            <p>Atendido: {{ payment.received_by.get_full_name|default:payment.received_by.username }}</p>
             {% endif %}
             <p>{{ current_time|date:"d/m/Y H:i:s" }}</p>
-            <p class="powered-by">Powered by SoluPark</p>
+            <p class="brand">Powered by SoluPark</p>
         </div>
     </div>
     
-    <div class="no-print" style="text-align:center; margin-top:20px;">
-        <button onclick="window.print()" style="padding:10px 30px; font-size:16px; cursor:pointer; background:#10b981; color:white; border:none; border-radius:8px;">
+    <div class="no-print" style="text-align:center; margin-top:20px; display:flex; justify-content:center; gap:10px;">
+        <button onclick="window.print()" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#10b981; color:white; border:none; border-radius:8px;">
             Imprimir
         </button>
-        <button onclick="history.back()" style="padding:10px 30px; font-size:16px; cursor:pointer; background:#64748b; color:white; border:none; border-radius:8px; margin-left:10px;">
+        <button onclick="history.back()" style="padding:12px 35px; font-size:16px; cursor:pointer; background:#64748b; color:white; border:none; border-radius:8px;">
             Volver
         </button>
     </div>
     
-    <script>window.onload = function() { window.print(); };</script>
+    <script>
+        window.onload = function() { window.print(); };
+    </script>
 </body>
 </html>
