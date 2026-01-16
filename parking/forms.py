@@ -52,11 +52,13 @@ class ParkingTicketForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = VehicleCategory
-        fields = ['name', 'first_hour_rate', 'additional_hour_rate', 'is_monthly', 'monthly_rate']
+        fields = ['name', 'first_hour_rate', 'additional_hour_rate', 'extended_hours', 'extended_rate', 'is_monthly', 'monthly_rate']
         labels = {
             'name': 'Nombre',
             'first_hour_rate': 'Tarifa primera hora',
             'additional_hour_rate': 'Tarifa hora adicional',
+            'extended_hours': 'Horas del bloque (opcional)',
+            'extended_rate': 'Tarifa del bloque (opcional)',
             'is_monthly': '¿Es mensual?',
             'monthly_rate': 'Tarifa mensual',
         }
@@ -64,15 +66,29 @@ class CategoryForm(forms.ModelForm):
             'name': forms.TextInput(attrs={'class': INPUT_CLASS}),
             'first_hour_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '100'}),
             'additional_hour_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '100'}),
+            'extended_hours': forms.NumberInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: 12 o 24'}),
+            'extended_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '100', 'placeholder': 'Tarifa por el bloque'}),
             'monthly_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '1000'}),
+        }
+        help_texts = {
+            'extended_hours': 'Si configura este campo, se cobrará la tarifa del bloque por las primeras X horas, y luego hora adicional.',
+            'extended_rate': 'Tarifa fija por el bloque de horas. Después se cobra la tarifa de hora adicional.',
         }
 
     def clean(self):
         cleaned_data = super().clean()
         is_monthly = cleaned_data.get('is_monthly')
         monthly_rate = cleaned_data.get('monthly_rate')
+        extended_hours = cleaned_data.get('extended_hours')
+        extended_rate = cleaned_data.get('extended_rate')
 
         if is_monthly and (monthly_rate is None or monthly_rate <= 0):
             self.add_error('monthly_rate', 'Debe especificar una tarifa mensual válida.')
+        
+        # Validar que si se configura extended_hours, también se configure extended_rate
+        if extended_hours and not extended_rate:
+            self.add_error('extended_rate', 'Debe especificar la tarifa del bloque.')
+        if extended_rate and not extended_hours:
+            self.add_error('extended_hours', 'Debe especificar las horas del bloque.')
         
         return cleaned_data

@@ -37,6 +37,18 @@
                 <h3 class="text-lg font-semibold text-slate-900 mb-4">{{ category.name }}</h3>
                 
                 <div class="space-y-3">
+                    {% if category.extended_hours %}
+                    <!-- Tarifa por bloque de tiempo -->
+                    <div class="flex items-center justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-500 text-sm">Bloque {{ category.extended_hours }}h</span>
+                        <span class="font-semibold text-sky-600">${{ category.extended_rate|floatformat:0 }}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-500 text-sm">Hora adicional</span>
+                        <span class="font-semibold text-slate-900">${{ category.additional_hour_rate|floatformat:0 }}</span>
+                    </div>
+                    {% else %}
+                    <!-- Tarifa por hora normal -->
                     <div class="flex items-center justify-between py-2 border-b border-slate-100">
                         <span class="text-slate-500 text-sm">Primera hora</span>
                         <span class="font-semibold text-slate-900">${{ category.first_hour_rate|floatformat:0 }}</span>
@@ -45,6 +57,7 @@
                         <span class="text-slate-500 text-sm">Hora adicional</span>
                         <span class="font-semibold text-slate-900">${{ category.additional_hour_rate|floatformat:0 }}</span>
                     </div>
+                    {% endif %}
                     {% if category.is_monthly %}
                     <div class="flex items-center justify-between py-2">
                         <span class="text-slate-500 text-sm">Mensualidad</span>

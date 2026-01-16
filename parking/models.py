@@ -20,6 +20,11 @@ class VehicleCategory(TenantModel):
     """
     Categorías de vehículos por tenant.
     Cada parqueadero define sus propias categorías y tarifas.
+    
+    Modos de tarifa:
+    1. Por hora: first_hour_rate + additional_hour_rate (cuando extended_hours es None)
+    2. Por bloque de tiempo: extended_rate por las primeras extended_hours horas,
+       luego additional_hour_rate por cada hora adicional
     """
     name = models.CharField(max_length=50, verbose_name="Nombre")
     first_hour_rate = models.DecimalField(
@@ -30,6 +35,17 @@ class VehicleCategory(TenantModel):
         max_digits=8, decimal_places=2, default=0,
         verbose_name="Tarifa hora adicional"
     )
+    # Campos para tarifas de tiempo extendido (12h, 24h, etc.)
+    extended_hours = models.PositiveIntegerField(
+        null=True, blank=True,
+        verbose_name="Horas del bloque",
+        help_text="Ej: 12 para tarifa de 12 horas, 24 para tarifa de día completo"
+    )
+    extended_rate = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name="Tarifa del bloque",
+        help_text="Tarifa fija por el bloque de horas. Después se cobra hora adicional."
+    )
     is_monthly = models.BooleanField(default=False, verbose_name="Es mensualidad")
     monthly_rate = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True,
@@ -38,6 +54,36 @@ class VehicleCategory(TenantModel):
 
     def __str__(self):
         return self.name
+    
+    def calculate_fee(self, hours):
+        """
+        Calcula la tarifa según las horas de estacionamiento.
+        
+        Si extended_hours está configurado:
+          - Cobra extended_rate por las primeras extended_hours horas
+          - Después cobra additional_hour_rate por cada hora extra
+        
+        Si no está configurado (modo normal):
+          - Cobra first_hour_rate por la primera hora
+          - Después cobra additional_hour_rate por cada hora adicional
+        """
+        if hours <= 0:
+            return 0
+        
+        # Modo tarifa extendida (12h, 24h, etc.)
+        if self.extended_hours and self.extended_rate:
+            total = float(self.extended_rate)
+            if hours > self.extended_hours:
+                extra_hours = math.ceil(hours - self.extended_hours)
+                total += extra_hours * float(self.additional_hour_rate)
+            return round(total, 2)
+        
+        # Modo normal (primera hora + adicionales)
+        total = float(self.first_hour_rate)
+        if hours > 1:
+            additional_hours = math.ceil(hours - 1)
+            total += additional_hours * float(self.additional_hour_rate)
+        return round(total, 2)
 
     class Meta:
         verbose_name = "Categoría de Vehículo"
@@ -192,12 +238,8 @@ class ParkingTicket(TenantModel):
             duration = self.exit_time - self.entry_time
             hours = duration.total_seconds() / 3600
 
-            total = float(self.category.first_hour_rate)
-            if hours > 1:
-                additional_hours = math.ceil(hours - 1)
-                total += additional_hours * float(self.category.additional_hour_rate)
-
-            return round(total, 2)
+            # Usar el método de cálculo de la categoría
+            return self.category.calculate_fee(hours)
         return self.calculate_current_fee()
 
     def calculate_current_fee(self):
@@ -215,12 +257,8 @@ class ParkingTicket(TenantModel):
             duration = timezone.now() - self.entry_time
             hours = duration.total_seconds() / 3600
 
-            total = float(self.category.first_hour_rate)
-            if hours > 1:
-                additional_hours = math.ceil(hours - 1)
-                total += additional_hours * float(self.category.additional_hour_rate)
-
-            return round(total, 2)
+            # Usar el método de cálculo de la categoría
+            return self.category.calculate_fee(hours)
         return 0
 
     def get_duration(self):
