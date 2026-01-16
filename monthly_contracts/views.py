@@ -468,6 +468,84 @@ def print_payment_receipt(request, payment_id):
 
 
 @login_required
+def payment_edit(request, payment_id):
+    """Editar un pago - Solo administradores"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    # Verificar que sea administrador
+    if not (request.user.is_tenant_admin or request.user.is_superadmin):
+        messages.error(request, 'No tiene permisos para editar pagos')
+        return redirect('payment_history')
+    
+    payment = get_object_or_404(ContractPayment, pk=payment_id, tenant=tenant)
+    payment_methods = PaymentMethod.objects.all_tenants().filter(
+        tenant=tenant,
+        is_active=True
+    ).order_by('order', 'name')
+    
+    month_names = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+                   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    
+    if request.method == 'POST':
+        try:
+            payment.amount = Decimal(request.POST.get('amount', payment.amount))
+            # Limpiar separadores de miles del mes y año
+            payment_month = str(request.POST.get('payment_month', payment.payment_month)).replace('.', '').replace(',', '')
+            payment_year = str(request.POST.get('payment_year', payment.payment_year)).replace('.', '').replace(',', '')
+            payment.payment_month = int(payment_month)
+            payment.payment_year = int(payment_year)
+            payment_method_id = request.POST.get('payment_method')
+            payment.payment_method_id = payment_method_id if payment_method_id else None
+            payment.reference = request.POST.get('reference', '')
+            payment.notes = request.POST.get('notes', '')
+            payment.save()
+            
+            messages.success(request, f'Pago actualizado correctamente')
+            return redirect('payment_history')
+        except Exception as e:
+            messages.error(request, f'Error al actualizar: {str(e)}')
+    
+    return render(request, 'monthly_contracts/payment_edit.html', {
+        'payment': payment,
+        'payment_methods': payment_methods,
+        'month_names': month_names,
+        'months': list(range(1, 13)),
+        'years': list(range(2024, 2030))
+    })
+
+
+@login_required
+def payment_delete(request, payment_id):
+    """Eliminar un pago - Solo administradores"""
+    tenant = get_tenant(request)
+    if not tenant:
+        return redirect('dashboard')
+    
+    # Verificar que sea administrador
+    if not (request.user.is_tenant_admin or request.user.is_superadmin):
+        messages.error(request, 'No tiene permisos para eliminar pagos')
+        return redirect('payment_history')
+    
+    payment = get_object_or_404(ContractPayment, pk=payment_id, tenant=tenant)
+    
+    if request.method == 'POST':
+        client_name = payment.contract.third_party.full_name
+        month_names = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
+                       "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        month_name = month_names[payment.payment_month]
+        amount = payment.amount
+        payment.delete()
+        messages.success(request, f'Pago de ${amount:,.0f} ({month_name} {payment.payment_year}) de {client_name} eliminado')
+        return redirect('payment_history')
+    
+    return render(request, 'monthly_contracts/payment_delete.html', {
+        'payment': payment
+    })
+
+
+@login_required
 def get_client_vehicles(request):
     """API para obtener vehículos de un cliente"""
     tenant = get_tenant(request)

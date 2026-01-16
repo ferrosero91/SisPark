@@ -14,5 +14,7 @@ urlpatterns = [
     path('<uuid:pk>/agregar-vehiculo/', views.add_contract_vehicle, name='add_contract_vehicle'),
     path('<uuid:pk>/vehiculo/<uuid:vehicle_pk>/eliminar/', views.remove_contract_vehicle, name='remove_contract_vehicle'),
     path('recibo/<uuid:payment_id>/', views.print_payment_receipt, name='print_payment_receipt'),
+    path('pago/<uuid:payment_id>/editar/', views.payment_edit, name='payment_edit'),
+    path('pago/<uuid:payment_id>/eliminar/', views.payment_delete, name='payment_delete'),
     path('api/vehiculos-cliente/', views.get_client_vehicles, name='get_client_vehicles'),
 ]

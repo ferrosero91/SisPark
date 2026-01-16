@@ -1,0 +1,65 @@
+{% extends 'parking/base.html' %}
+{% load humanize %}
+
+{% block title %}Eliminar Pago - SoluPark{% endblock %}
+{% block page_title %}Eliminar Pago{% endblock %}
+{% block page_subtitle %}Confirmar eliminación{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4">
+            <h2 class="text-xl font-bold text-white">
+                <i class="fas fa-exclamation-triangle mr-2"></i>Eliminar Pago
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                <p class="text-red-800 font-medium">¿Está seguro de eliminar este pago?</p>
+                <p class="text-red-600 text-sm mt-1">Esta acción no se puede deshacer.</p>
+            </div>
+            
+            <!-- Info del pago -->
+            <div class="bg-slate-50 rounded-xl p-4 space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Cliente:</span>
+                    <span class="font-bold">{{ payment.contract.third_party.full_name }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Vehículos:</span>
+                    <span class="font-mono">{{ payment.contract.vehicles_list }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Período:</span>
+                    <span class="font-medium">{{ payment.get_month_name }} {{ payment.payment_year }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-600">Fecha de pago:</span>
+                    <span>{{ payment.payment_date|date:"d/m/Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between border-t border-slate-200 pt-3">
+                    <span class="text-slate-600">Monto:</span>
+                    <span class="text-xl font-bold text-red-600">${{ payment.amount|floatformat:0|intcomma }}</span>
+                </div>
+            </div>
+            
+            <!-- Botones -->
+            <form method="post" class="mt-6">
+                {% csrf_token %}
+                <div class="flex gap-3">
+                    <button type="submit"
+                            class="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors">
+                        <i class="fas fa-trash mr-2"></i>Sí, Eliminar
+                    </button>
+                    <a href="{% url 'payment_history' %}"
+                       class="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors text-center">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

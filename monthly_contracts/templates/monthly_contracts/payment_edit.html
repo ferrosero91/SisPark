@@ -1,0 +1,106 @@
+{% extends 'parking/base.html' %}
+{% load humanize %}
+
+{% block title %}Editar Pago - SoluPark{% endblock %}
+{% block page_title %}Editar Pago{% endblock %}
+{% block page_subtitle %}Corregir información del pago{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+            <h2 class="text-xl font-bold text-white">Editar Pago</h2>
+            <p class="text-blue-100 text-sm">{{ payment.contract.third_party.full_name }}</p>
+        </div>
+        
+        <form method="post" class="p-6 space-y-6">
+            {% csrf_token %}
+            
+            <!-- Info del contrato -->
+            <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-sm text-slate-600">Cliente</p>
+                <p class="font-bold text-slate-900">{{ payment.contract.third_party.full_name }}</p>
+                <p class="text-sm text-slate-600 mt-2">Vehículos</p>
+                <p class="font-mono text-slate-900">{{ payment.contract.vehicles_list }}</p>
+            </div>
+            
+            <!-- Monto -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Monto</label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                    <input type="number" name="amount" value="{{ payment.amount|floatformat:0 }}" required
+                           class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            
+            <!-- Mes y Año -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Mes</label>
+                    <select name="payment_month" required
+                            class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+                        {% for m in months %}
+                        <option value="{{ m }}" {% if m == payment.payment_month %}selected{% endif %}>
+                            {{ month_names|slice:m|last }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Año</label>
+                    <select name="payment_year" required
+                            class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+                        {% for y in years %}
+                        <option value="{{ y }}" {% if y == payment.payment_year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Método de pago -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Método de Pago</label>
+                <select name="payment_method"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
+                    <option value="">Sin especificar</option>
+                    {% for method in payment_methods %}
+                    <option value="{{ method.pk }}" {% if payment.payment_method_id == method.pk %}selected{% endif %}>
+                        {{ method.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Referencia -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Referencia (opcional)</label>
+                <input type="text" name="reference" value="{{ payment.reference }}"
+                       class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                       placeholder="Número de transacción, recibo, etc.">
+            </div>
+            
+            <!-- Notas -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">Notas (opcional)</label>
+                <textarea name="notes" rows="2"
+                          class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+                          placeholder="Observaciones adicionales">{{ payment.notes }}</textarea>
+            </div>
+            
+            <!-- Botones -->
+            <div class="flex gap-3 pt-4">
+                <button type="submit"
+                        class="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors">
+                    <i class="fas fa-save mr-2"></i>Guardar Cambios
+                </button>
+                <a href="{% url 'payment_history' %}"
+                   class="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl transition-colors">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
