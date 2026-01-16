@@ -32,7 +32,14 @@
                         <select name="category" required
                                 class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
                             {% for choice in form.category.field.queryset %}
-                            <option value="{{ choice.pk }}">{{ choice.name }} - ${{ choice.first_hour_rate|floatformat:0 }}/h</option>
+                            <option value="{{ choice.pk }}">
+                                {{ choice.name }} - 
+                                {% if choice.extended_hours and choice.extended_rate %}
+                                    ${{ choice.extended_rate|floatformat:0 }}/{{ choice.extended_hours }}h
+                                {% else %}
+                                    ${{ choice.first_hour_rate|floatformat:0 }}/h
+                                {% endif %}
+                            </option>
                             {% endfor %}
                         </select>
                     </div>
