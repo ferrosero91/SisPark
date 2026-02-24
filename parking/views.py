@@ -288,7 +288,7 @@ def print_exit_ticket(request):
         payment_method_id = request.POST.get('payment_method')
         is_cash = request.POST.get('is_cash') == '1'
 
-        if ticket_id and amount_received:
+        if ticket_id:
             try:
                 from parking.models_config import PaymentMethod
                 
