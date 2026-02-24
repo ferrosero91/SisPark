@@ -315,11 +315,14 @@ def print_exit_ticket(request):
                     ticket.payment_method = payment_method
                     ticket.save()
                 
-                # Validar y convertir amount_received
-                if not amount_received or amount_received.strip() == '':
-                    amount_received = ticket.amount_paid or 0
-                else:
-                    amount_received = float(amount_received)
+                # Validar y convertir amount_received de forma robusta
+                try:
+                    if amount_received is None or str(amount_received).strip() == '':
+                        amount_received = float(ticket.amount_paid or 0)
+                    else:
+                        amount_received = float(amount_received)
+                except (ValueError, TypeError, AttributeError):
+                    amount_received = float(ticket.amount_paid or 0)
                 
                 amount_paid = float(ticket.amount_paid or 0)
                 change = amount_received - amount_paid if is_cash else 0

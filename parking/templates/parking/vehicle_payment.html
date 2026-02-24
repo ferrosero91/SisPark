@@ -118,6 +118,10 @@ function selectMethod(label, methodId, paymentType) {
     document.getElementById('hiddenPaymentMethod').value = methodId;
     document.getElementById('hiddenIsCash').value = isCash ? '1' : '0';
     
+    // Asegurar que amount_received siempre tenga un valor válido
+    var amountValue = totalAmount || 0;
+    document.getElementById('hiddenAmountReceived').value = amountValue;
+    
     // Actualizar estilos de todas las opciones
     var allOptions = document.querySelectorAll('.payment-option');
     for (var i = 0; i < allOptions.length; i++) {
