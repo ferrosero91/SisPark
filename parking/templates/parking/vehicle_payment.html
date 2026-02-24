@@ -47,10 +47,10 @@
     </div>
     
     <!-- Formulario de pago -->
-    <form method="post" action="{% url 'print-exit-ticket' %}" id="paymentForm">
+    <form method="post" action="{% url 'print-exit-ticket' %}" id="paymentForm" onsubmit="return validateForm()">
         {% csrf_token %}
         <input type="hidden" name="ticket_id" value="{{ ticket.id }}">
-        <input type="hidden" name="amount_received" id="hiddenAmountReceived" value="{{ amount|stringformat:'d' }}">
+        <input type="hidden" name="amount_received" id="hiddenAmountReceived" value="{{ amount|default:0 }}">
         <input type="hidden" name="payment_method" id="hiddenPaymentMethod" value="">
         <input type="hidden" name="is_cash" id="hiddenIsCash" value="0">
         
