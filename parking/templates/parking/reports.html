@@ -337,9 +337,17 @@
                                 </td>
                                 <td class="px-4 py-3 text-slate-600">{{ ticket.category.name|default:"-" }}</td>
                                 <td class="px-4 py-3 text-slate-600">
-                                    {% with duration=ticket.exit_time|timesince:ticket.entry_time %}
-                                    {{ duration }}
-                                    {% endwith %}
+                                    {% if ticket.exit_time and ticket.entry_time %}
+                                        {% with duration_seconds=ticket.exit_time|timesince:ticket.entry_time %}
+                                            {% if duration_seconds %}
+                                                {{ ticket.get_duration }} hora(s)
+                                            {% else %}
+                                                {{ ticket.get_duration }} minutos
+                                            {% endif %}
+                                        {% endwith %}
+                                    {% else %}
+                                        0 minutos
+                                    {% endif %}
                                 </td>
                                 <td class="px-4 py-3">
                                     <span class="inline-flex items-center gap-1 text-slate-600">
