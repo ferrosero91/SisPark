@@ -287,6 +287,10 @@ def print_exit_ticket(request):
         amount_received = request.POST.get('amount_received')
         payment_method_id = request.POST.get('payment_method')
         is_cash = request.POST.get('is_cash') == '1'
+        
+        # Limpiar ticket_id de cualquier formato de número
+        if ticket_id:
+            ticket_id = str(ticket_id).replace('.', '').replace(',', '').strip()
 
         if ticket_id:
             try:
