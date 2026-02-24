@@ -335,9 +335,6 @@ def print_exit_ticket(request):
                     'is_cash': is_cash,
                     'current_time': timezone.now(),
                 })
-            except ValueError:
-                messages.error(request, 'El monto recibido no es válido')
-                return redirect('vehicle-exit')
             except Exception as e:
                 messages.error(request, f'Error al imprimir ticket: {str(e)}')
                 return redirect('dashboard')
