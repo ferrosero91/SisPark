@@ -37,7 +37,19 @@
                 <h3 class="text-lg font-semibold text-slate-900 mb-4">{{ category.name }}</h3>
                 
                 <div class="space-y-3">
-                    {% if category.extended_hours %}
+                    {% if category.rate_by_minute %}
+                    <!-- Tarifa por minuto -->
+                    <div class="flex items-center justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-500 text-sm">Por minuto</span>
+                        <span class="font-semibold text-purple-600">${{ category.minute_rate|floatformat:0 }}/min</span>
+                    </div>
+                    {% if category.minimum_minutes %}
+                    <div class="flex items-center justify-between py-2 border-b border-slate-100">
+                        <span class="text-slate-500 text-sm">Mínimo</span>
+                        <span class="font-semibold text-slate-900">{{ category.minimum_minutes }} min</span>
+                    </div>
+                    {% endif %}
+                    {% elif category.extended_hours %}
                     <!-- Tarifa por bloque de tiempo -->
                     <div class="flex items-center justify-between py-2 border-b border-slate-100">
                         <span class="text-slate-500 text-sm">Bloque {{ category.extended_hours }}h</span>

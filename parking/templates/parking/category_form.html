@@ -17,22 +17,54 @@
                        placeholder="Ej: Carro, Moto, Bicicleta">
             </div>
             
+            <!-- Tarifa por minuto -->
+            <div class="pt-4 border-t border-slate-100">
+                <label class="flex items-center gap-3 cursor-pointer mb-3">
+                    <input type="checkbox" name="rate_by_minute" id="rateByMinute"
+                           class="w-5 h-5 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                    <span class="text-slate-700">Cobrar por minuto</span>
+                </label>
+                <p class="text-xs text-slate-500 mb-3">Si activa esta opción, se cobrará por minuto en lugar de por hora.</p>
+                
+                <div id="minuteRateFields" class="hidden space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Tarifa por minuto</label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                                <input type="number" name="minute_rate" min="0" step="10"
+                                       class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                                       placeholder="Ej: 50">
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">Tarifa por cada minuto</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Minutos mínimos (opcional)</label>
+                            <input type="number" name="minimum_minutes" min="1" max="120"
+                                   class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                                   placeholder="Ej: 15">
+                            <p class="text-xs text-slate-500 mt-1">Tiempo mínimo a cobrar</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Tarifa por hora (modo normal) -->
-            <div class="grid grid-cols-2 gap-4">
+            <div id="hourlyRateFields" class="grid grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-2">Tarifa primera hora *</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Tarifa primera hora</label>
                     <div class="relative">
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                        <input type="number" name="first_hour_rate" required min="0" step="100"
+                        <input type="number" name="first_hour_rate" id="firstHourRate" min="0" step="100"
                                class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                                placeholder="3000">
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-2">Tarifa hora adicional *</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Tarifa hora adicional</label>
                     <div class="relative">
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                        <input type="number" name="additional_hour_rate" required min="0" step="100"
+                        <input type="number" name="additional_hour_rate" id="additionalHourRate" min="0" step="100"
                                class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                                placeholder="2000">
                     </div>
@@ -40,7 +72,7 @@
             </div>
             
             <!-- Tarifa por bloque de tiempo (12h, 24h, etc.) -->
-            <div class="pt-4 border-t border-slate-100">
+            <div id="extendedRateSection" class="pt-4 border-t border-slate-100">
                 <label class="flex items-center gap-3 cursor-pointer mb-3">
                     <input type="checkbox" id="useExtendedRate"
                            class="w-5 h-5 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
@@ -101,10 +133,12 @@
 </div>
 
 <script>
+// Manejar visibilidad de campos de mensualidad
 document.getElementById('isMonthly').addEventListener('change', function() {
     document.getElementById('monthlyRateField').classList.toggle('hidden', !this.checked);
 });
 
+// Manejar visibilidad de campos de tarifa extendida
 document.getElementById('useExtendedRate').addEventListener('change', function() {
     document.getElementById('extendedRateFields').classList.toggle('hidden', !this.checked);
     if (!this.checked) {
@@ -112,5 +146,49 @@ document.getElementById('useExtendedRate').addEventListener('change', function()
         document.querySelector('input[name="extended_rate"]').value = '';
     }
 });
+
+// Manejar visibilidad de campos de tarifa por minuto
+const rateByMinuteCheckbox = document.getElementById('rateByMinute');
+const minuteFields = document.getElementById('minuteRateFields');
+const hourlyFields = document.getElementById('hourlyRateFields');
+const extendedSection = document.getElementById('extendedRateSection');
+const firstHourInput = document.getElementById('firstHourRate');
+const additionalHourInput = document.getElementById('additionalHourRate');
+
+function toggleRateMode() {
+    if (rateByMinuteCheckbox.checked) {
+        minuteFields.classList.remove('hidden');
+        hourlyFields.classList.add('hidden');
+        extendedSection.classList.add('hidden');
+        // Hacer campos de hora no requeridos y poner valor 0
+        firstHourInput.removeAttribute('required');
+        additionalHourInput.removeAttribute('required');
+        if (!firstHourInput.value || firstHourInput.value === '') {
+            firstHourInput.value = '0';
+        }
+        if (!additionalHourInput.value || additionalHourInput.value === '') {
+            additionalHourInput.value = '0';
+        }
+    } else {
+        minuteFields.classList.add('hidden');
+        hourlyFields.classList.remove('hidden');
+        extendedSection.classList.remove('hidden');
+        // Hacer campos de hora requeridos
+        firstHourInput.setAttribute('required', 'required');
+        additionalHourInput.setAttribute('required', 'required');
+        // Limpiar valores 0 si estaban
+        if (firstHourInput.value === '0') {
+            firstHourInput.value = '';
+        }
+        if (additionalHourInput.value === '0') {
+            additionalHourInput.value = '';
+        }
+    }
+}
+
+rateByMinuteCheckbox.addEventListener('change', toggleRateMode);
+
+// Ejecutar al cargar la página
+document.addEventListener('DOMContentLoaded', toggleRateMode);
 </script>
 {% endblock %}

@@ -22,11 +22,31 @@ class VehicleCategory(TenantModel):
     Cada parqueadero define sus propias categorías y tarifas.
     
     Modos de tarifa:
-    1. Por hora: first_hour_rate + additional_hour_rate (cuando extended_hours es None)
-    2. Por bloque de tiempo: extended_rate por las primeras extended_hours horas,
+    1. Por minuto: minute_rate * minutos (cuando rate_by_minute es True)
+    2. Por hora: first_hour_rate + additional_hour_rate (cuando extended_hours es None)
+    3. Por bloque de tiempo: extended_rate por las primeras extended_hours horas,
        luego additional_hour_rate por cada hora adicional
     """
     name = models.CharField(max_length=50, verbose_name="Nombre")
+    
+    # Campos para tarifa por minuto
+    rate_by_minute = models.BooleanField(
+        default=False,
+        verbose_name="Cobrar por minuto",
+        help_text="Si está activo, se cobrará por minuto en lugar de por hora"
+    )
+    minute_rate = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        verbose_name="Tarifa por minuto",
+        help_text="Tarifa que se cobra por cada minuto"
+    )
+    minimum_minutes = models.PositiveIntegerField(
+        null=True, blank=True,
+        verbose_name="Minutos mínimos",
+        help_text="Tiempo mínimo a cobrar (opcional). Ej: 15 minutos mínimo"
+    )
+    
+    # Campos para tarifa por hora
     first_hour_rate = models.DecimalField(
         max_digits=8, decimal_places=2, default=0,
         verbose_name="Tarifa primera hora"
@@ -35,6 +55,7 @@ class VehicleCategory(TenantModel):
         max_digits=8, decimal_places=2, default=0,
         verbose_name="Tarifa hora adicional"
     )
+    
     # Campos para tarifas de tiempo extendido (12h, 24h, etc.)
     extended_hours = models.PositiveIntegerField(
         null=True, blank=True,
@@ -46,6 +67,8 @@ class VehicleCategory(TenantModel):
         verbose_name="Tarifa del bloque",
         help_text="Tarifa fija por el bloque de horas. Después se cobra hora adicional."
     )
+    
+    # Campos para mensualidades
     is_monthly = models.BooleanField(default=False, verbose_name="Es mensualidad")
     monthly_rate = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True,
@@ -59,16 +82,24 @@ class VehicleCategory(TenantModel):
         """
         Calcula la tarifa según las horas de estacionamiento.
         
-        Si extended_hours está configurado:
-          - Cobra extended_rate por las primeras extended_hours horas
-          - Después cobra additional_hour_rate por cada hora extra
-        
-        Si no está configurado (modo normal):
-          - Cobra first_hour_rate por la primera hora
-          - Después cobra additional_hour_rate por cada hora adicional
+        Modos de tarifa:
+        1. Por minuto: Si rate_by_minute está activo, cobra minute_rate por cada minuto
+        2. Por bloque: Si extended_hours está configurado, cobra extended_rate por las 
+           primeras X horas y luego additional_hour_rate por cada hora extra
+        3. Por hora: Cobra first_hour_rate por la primera hora y additional_hour_rate 
+           por cada hora adicional
         """
         if hours <= 0:
             return 0
+        
+        # Modo tarifa por minuto
+        if self.rate_by_minute and self.minute_rate:
+            minutes = hours * 60
+            # Aplicar minutos mínimos si está configurado
+            if self.minimum_minutes and minutes < self.minimum_minutes:
+                minutes = self.minimum_minutes
+            total = minutes * float(self.minute_rate)
+            return round(total, 2)
         
         # Modo tarifa extendida (12h, 24h, etc.)
         if self.extended_hours and self.extended_rate:

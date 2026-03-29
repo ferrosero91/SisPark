@@ -52,9 +52,18 @@ class ParkingTicketForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = VehicleCategory
-        fields = ['name', 'first_hour_rate', 'additional_hour_rate', 'extended_hours', 'extended_rate', 'is_monthly', 'monthly_rate']
+        fields = [
+            'name', 
+            'rate_by_minute', 'minute_rate', 'minimum_minutes',
+            'first_hour_rate', 'additional_hour_rate', 
+            'extended_hours', 'extended_rate', 
+            'is_monthly', 'monthly_rate'
+        ]
         labels = {
             'name': 'Nombre',
+            'rate_by_minute': '¿Cobrar por minuto?',
+            'minute_rate': 'Tarifa por minuto',
+            'minimum_minutes': 'Minutos mínimos (opcional)',
             'first_hour_rate': 'Tarifa primera hora',
             'additional_hour_rate': 'Tarifa hora adicional',
             'extended_hours': 'Horas del bloque (opcional)',
@@ -64,6 +73,8 @@ class CategoryForm(forms.ModelForm):
         }
         widgets = {
             'name': forms.TextInput(attrs={'class': INPUT_CLASS}),
+            'minute_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '10'}),
+            'minimum_minutes': forms.NumberInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: 15'}),
             'first_hour_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '100'}),
             'additional_hour_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '100'}),
             'extended_hours': forms.NumberInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: 12 o 24'}),
@@ -71,6 +82,9 @@ class CategoryForm(forms.ModelForm):
             'monthly_rate': forms.NumberInput(attrs={'class': INPUT_CLASS, 'step': '1000'}),
         }
         help_texts = {
+            'rate_by_minute': 'Si activa esta opción, se cobrará por minuto en lugar de por hora.',
+            'minute_rate': 'Tarifa que se cobra por cada minuto de estacionamiento.',
+            'minimum_minutes': 'Tiempo mínimo a cobrar. Ej: si configura 15, siempre se cobrarán mínimo 15 minutos.',
             'extended_hours': 'Si configura este campo, se cobrará la tarifa del bloque por las primeras X horas, y luego hora adicional.',
             'extended_rate': 'Tarifa fija por el bloque de horas. Después se cobra la tarifa de hora adicional.',
         }
@@ -81,14 +95,35 @@ class CategoryForm(forms.ModelForm):
         monthly_rate = cleaned_data.get('monthly_rate')
         extended_hours = cleaned_data.get('extended_hours')
         extended_rate = cleaned_data.get('extended_rate')
+        rate_by_minute = cleaned_data.get('rate_by_minute')
+        minute_rate = cleaned_data.get('minute_rate')
+        first_hour_rate = cleaned_data.get('first_hour_rate')
+        additional_hour_rate = cleaned_data.get('additional_hour_rate')
 
         if is_monthly and (monthly_rate is None or monthly_rate <= 0):
             self.add_error('monthly_rate', 'Debe especificar una tarifa mensual válida.')
         
+        # Validar tarifa por minuto
+        if rate_by_minute:
+            if minute_rate is None or minute_rate <= 0:
+                self.add_error('minute_rate', 'Debe especificar una tarifa por minuto válida.')
+            # Si es por minuto, asegurar que los campos de hora tengan valores por defecto
+            if not first_hour_rate or first_hour_rate <= 0:
+                cleaned_data['first_hour_rate'] = 0
+            if not additional_hour_rate or additional_hour_rate <= 0:
+                cleaned_data['additional_hour_rate'] = 0
+        else:
+            # Si no es por minuto, validar tarifas por hora
+            if first_hour_rate is None or first_hour_rate <= 0:
+                self.add_error('first_hour_rate', 'Debe especificar una tarifa de primera hora válida.')
+            if additional_hour_rate is None or additional_hour_rate <= 0:
+                self.add_error('additional_hour_rate', 'Debe especificar una tarifa de hora adicional válida.')
+        
         # Validar que si se configura extended_hours, también se configure extended_rate
-        if extended_hours and not extended_rate:
-            self.add_error('extended_rate', 'Debe especificar la tarifa del bloque.')
-        if extended_rate and not extended_hours:
-            self.add_error('extended_hours', 'Debe especificar las horas del bloque.')
+        if not rate_by_minute:  # Solo validar si no es por minuto
+            if extended_hours and not extended_rate:
+                self.add_error('extended_rate', 'Debe especificar la tarifa del bloque.')
+            if extended_rate and not extended_hours:
+                self.add_error('extended_hours', 'Debe especificar las horas del bloque.')
         
         return cleaned_data
