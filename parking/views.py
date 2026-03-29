@@ -241,6 +241,15 @@ def vehicle_payment(request):
         messages.error(request, 'No se especificó un ticket')
         return redirect('vehicle-exit')
     
+    # Limpiar el ticket_id de separadores de miles y convertir a entero
+    try:
+        if isinstance(ticket_id, str):
+            ticket_id = ticket_id.replace('.', '').replace(',', '')
+        ticket_id = int(ticket_id)
+    except (ValueError, TypeError):
+        messages.error(request, 'ID de ticket inválido')
+        return redirect('vehicle-exit')
+    
     ticket_query = ParkingTicket.objects.all_tenants().filter(id=ticket_id, exit_time=None)
     if tenant:
         ticket_query = ticket_query.filter(tenant=tenant)
@@ -440,6 +449,11 @@ def print_ticket(request):
     
     if ticket_id:
         try:
+            # Limpiar el ticket_id de separadores de miles y convertir a entero
+            if isinstance(ticket_id, str):
+                ticket_id = ticket_id.replace('.', '').replace(',', '')
+            ticket_id = int(ticket_id)
+            
             ticket_query = ParkingTicket.objects.all_tenants().filter(id=ticket_id)
             if tenant:
                 ticket_query = ticket_query.filter(tenant=tenant)

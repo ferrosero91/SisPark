@@ -1,6 +1,7 @@
 {% extends 'parking/base.html' %}
 {% load humanize %}
 {% load number_filters %}
+{% load l10n %}
 
 {% block title %}Dashboard - SoluPark{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
@@ -133,7 +134,7 @@
                         </td>
                         <td class="px-4 lg:px-6 py-3 lg:py-4 text-right">
                             <div class="flex items-center justify-end gap-1 lg:gap-2">
-                                <a href="{% url 'print-ticket' %}?ticket_id={{ vehicle.id }}" 
+                                <a href="{% url 'print-ticket' %}?ticket_id={{ vehicle.id|unlocalize }}" 
                                    class="inline-flex items-center gap-1 px-2 lg:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs lg:text-sm font-medium transition-colors"
                                    title="Reimprimir ticket">
                                     <i class="fas fa-print"></i>
