@@ -1418,7 +1418,13 @@ def cash_register(request):
     today = timezone.now().date()
     
     # Obtener turno activo del usuario
-    from .models import Turno
+    from .models import Turno, Expense
+    from monthly_contracts.models import ContractPayment
+    from parking.models_config import PaymentMethod
+    from collections import defaultdict
+    from decimal import Decimal
+    from django.db import transaction as db_transaction
+    
     turno_activo = Turno.objects.all_tenants().filter(
         tenant=tenant,
         user=request.user,
@@ -1460,7 +1466,6 @@ def cash_register(request):
         tickets = ParkingTicket.objects.none()
     
     # Pagos de mensualidades
-    from monthly_contracts.models import ContractPayment
     if tenant:
         contract_payments = ContractPayment.objects.filter(
             tenant=tenant,
@@ -1472,10 +1477,6 @@ def cash_register(request):
         contract_payments = ContractPayment.objects.none()
     
     # Calcular resumen por método de pago
-    from parking.models_config import PaymentMethod
-    from collections import defaultdict
-    from decimal import Decimal
-    
     payment_summary = defaultdict(lambda: {'count': 0, 'total': Decimal('0'), 'is_cash': False})
     
     # Sumar tickets de parqueadero
@@ -1510,26 +1511,27 @@ def cash_register(request):
     ]
     payment_summary_list.sort(key=lambda x: (-x['total'], x['name']))
     
-    # Calcular totales
-    total_income = sum(ticket.amount_paid or 0 for ticket in tickets)
+    # Calcular totales usando Decimal para precisión
+    total_income = sum((ticket.amount_paid or Decimal('0')) for ticket in tickets)
     total_contracts_cash = sum(
         p.amount for p in contract_payments 
         if p.payment_method and p.payment_method.payment_type == 'cash'
     )
-    total_contracts = sum(p.amount for p in contract_payments)
+    total_contracts = sum(p.amount or Decimal('0') for p in contract_payments)
     
-    # Solo efectivo para caja física
+    # Solo efectivo para caja física (mantener en Decimal)
     cash_from_tickets = sum(
-        ticket.amount_paid or 0 for ticket in tickets 
+        (ticket.amount_paid or Decimal('0')) for ticket in tickets 
         if ticket.payment_method and ticket.payment_method.payment_type == 'cash'
     ) + sum(
-        ticket.amount_paid or 0 for ticket in tickets 
+        (ticket.amount_paid or Decimal('0')) for ticket in tickets 
         if not ticket.payment_method  # Sin método = efectivo
     )
     
-    total_cash = float(cash_from_tickets) + float(total_contracts_cash)
-    total_all = float(total_income) + float(total_contracts)
+    total_cash = Decimal(str(float(cash_from_tickets))) + Decimal(str(float(total_contracts_cash or 0)))
+    total_all = Decimal(str(float(total_income))) + Decimal(str(float(total_contracts)))
 
+    # Obtener o crear caja del día (solo escribir en POST, no en GET)
     caja_date = start_date.date() if not turno_activo else today
     if tenant:
         caja_query = Caja.objects.all_tenants().filter(tenant=tenant, fecha=caja_date, tipo='Ingreso')
@@ -1538,13 +1540,12 @@ def cash_register(request):
 
     if caja_query.exists():
         caja = caja_query.first()
-        caja.monto = Decimal(str(total_cash))
-        caja.save()
     else:
+        # Solo crear la caja si es necesario (primera visita del día)
         caja = Caja(
             fecha=caja_date,
             tipo='Ingreso',
-            monto=Decimal(str(total_cash)),
+            monto=Decimal('0'),
             descripcion=f'Ingresos del {caja_date}',
             dinero_inicial=0.00
         )
@@ -1556,7 +1557,6 @@ def cash_register(request):
     dinero_inicial_base = float(turno_activo.initial_cash) if turno_activo else float(caja.dinero_inicial)
     
     # Obtener gastos del período
-    from .models import Expense
     if tenant:
         expenses = Expense.objects.all_tenants().filter(
             tenant=tenant,
@@ -1569,8 +1569,9 @@ def cash_register(request):
     total_expenses = sum(float(e.amount) for e in expenses)
     
     # Dinero esperado = base + ingresos efectivo - gastos
-    dinero_esperado = dinero_inicial_base + total_cash - total_expenses
+    dinero_esperado = dinero_inicial_base + float(total_cash) - total_expenses
 
+    # === MANEJO DE POST ===
     if request.method == 'POST' and 'set_dinero_inicial' in request.POST:
         try:
             dinero_inicial = float(request.POST.get('dinero_inicial', 0))
@@ -1598,42 +1599,39 @@ def cash_register(request):
                 messages.error(request, 'El dinero final no puede ser negativo.')
                 return redirect('cash_register')
 
-            caja.dinero_final = dinero_final
-            caja.monto = Decimal(str(total_cash))
-            caja.cuadre_realizado = True
-            caja.save()
-            
-            # Cerrar el turno activo del usuario
-            from .models import Turno
-            turno_activo = Turno.objects.all_tenants().filter(
-                tenant=tenant,
-                user=request.user,
-                is_active=True
-            ).first()
-            
-            if turno_activo:
-                turno_activo.end_time = timezone.now()
-                turno_activo.final_cash = dinero_final
-                turno_activo.expected_cash = dinero_esperado
-                turno_activo.difference = dinero_final - dinero_esperado
-                turno_activo.is_active = False
-                turno_activo.closed_by = request.user
-                turno_activo.save()
+            # Usar transacción atómica para garantizar consistencia caja + turno
+            with db_transaction.atomic():
+                caja.dinero_final = dinero_final
+                caja.monto = total_cash
+                caja.cuadre_realizado = True
+                caja.save()
+                
+                # Cerrar el turno activo (usar la referencia ya obtenida)
+                if turno_activo:
+                    turno_activo.end_time = timezone.now()
+                    turno_activo.final_cash = dinero_final
+                    turno_activo.expected_cash = Decimal(str(dinero_esperado))
+                    turno_activo.difference = Decimal(str(dinero_final - dinero_esperado))
+                    turno_activo.is_active = False
+                    turno_activo.closed_by = request.user
+                    turno_activo.save()
 
             messages.success(request, 'Cuadre de caja realizado con éxito. Turno cerrado.')
             return redirect('cash_register')
         except ValueError:
             messages.error(request, 'Por favor, ingrese un valor numérico válido.')
 
+    # === CÁLCULO DE DIFERENCIA (solo para mostrar, después del cuadre) ===
     diferencia = None
     diferencia_abs = None
-    if caja.cuadre_realizado:
-        diferencia = float(caja.dinero_final) - float(caja.dinero_inicial) - total_cash
+    if caja.cuadre_realizado and caja.dinero_final is not None:
+        # Diferencia = dinero contado - dinero esperado
+        diferencia = float(caja.dinero_final) - dinero_esperado
         diferencia_abs = abs(diferencia)
 
     # Calcular promedio por ticket
-    avg_ticket = total_income / len(tickets) if tickets else 0
-    total_tickets = total_income
+    avg_ticket = float(total_income) / len(tickets) if tickets else 0
+    total_tickets = float(total_income)
 
     context = {
         'today': today,
@@ -1645,8 +1643,8 @@ def cash_register(request):
         'total_income': total_income,
         'total_tickets': total_tickets,
         'total_contracts': total_contracts,
-        'total_cash': total_cash,
-        'total_all': total_all,
+        'total_cash': float(total_cash),
+        'total_all': float(total_all),
         'avg_ticket': avg_ticket,
         'caja': caja,
         'dinero_esperado': dinero_esperado,
@@ -2082,14 +2080,8 @@ def abrir_turno(request):
                 tipo='Ingreso'
             ).first()
             
-            # Si la caja existe y ya tiene cuadre realizado, resetearla para el nuevo turno
-            if caja and caja.cuadre_realizado:
-                caja.cuadre_realizado = False
-                caja.dinero_inicial = initial_cash
-                caja.dinero_final = None
-                caja.monto = 0
-                caja.save()
-            elif not caja:
+            if not caja:
+                # No existe caja del día, crear una nueva
                 caja = Caja(
                     tenant=tenant,
                     fecha=today,
@@ -2098,6 +2090,14 @@ def abrir_turno(request):
                     monto=0,
                     descripcion=f'Caja del {today}'
                 )
+                caja.save()
+            elif caja.cuadre_realizado:
+                # La caja ya fue cerrada por un turno anterior.
+                # Actualizar la base para el nuevo turno sin borrar el historial.
+                # El dinero_inicial del nuevo turno se maneja en el Turno, no en la Caja.
+                # Solo resetear el flag para permitir un nuevo cuadre.
+                caja.cuadre_realizado = False
+                caja.dinero_final = None
                 caja.save()
             elif not caja.dinero_inicial or caja.dinero_inicial == 0:
                 caja.dinero_inicial = initial_cash
