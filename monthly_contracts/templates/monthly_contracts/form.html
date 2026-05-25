@@ -1,4 +1,5 @@
 {% extends 'parking/base.html' %}
+{% load number_filters %}
 
 {% block title %}{{ title }} - SoluPark{% endblock %}
 {% block page_title %}{{ title }}{% endblock %}
@@ -56,7 +57,7 @@
                     </div>
                     <div class="sm:col-span-3">
                         <label class="block text-xs font-medium text-slate-500 mb-1">Tarifa Mensual</label>
-                        <input type="number" name="vehicle_rate" value="{{ cv.monthly_rate|floatformat:0 }}" 
+                        <input type="number" name="vehicle_rate" value="{{ cv.monthly_rate|raw_number }}" 
                                class="vehicle-rate w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" 
                                placeholder="150000" step="1000" min="0" oninput="calculateTotal()">
                     </div>

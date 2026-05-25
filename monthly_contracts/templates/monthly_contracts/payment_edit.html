@@ -1,5 +1,6 @@
 {% extends 'parking/base.html' %}
 {% load humanize %}
+{% load number_filters %}
 
 {% block title %}Editar Pago - SoluPark{% endblock %}
 {% block page_title %}Editar Pago{% endblock %}
@@ -30,7 +31,7 @@
                 <label class="block text-sm font-medium text-slate-700 mb-2">Monto</label>
                 <div class="relative">
                     <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                    <input type="number" name="amount" value="{{ payment.amount|floatformat:0 }}" required
+                    <input type="number" name="amount" value="{{ payment.amount|raw_number }}" required
                            class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>

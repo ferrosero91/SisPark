@@ -93,3 +93,24 @@ def format_currency_full(value):
     
     except (ValueError, TypeError):
         return "$0"
+
+
+@register.filter
+def raw_number(value):
+    """
+    Retorna el valor numérico sin formateo de miles ni decimales.
+    Ideal para usar en inputs type="number" que no aceptan separadores.
+    Ejemplos:
+    - Decimal('3500.00') → '3500'
+    - 15000 → '15000'
+    - None → ''
+    """
+    if value is None or value == '':
+        return ''
+    try:
+        num = float(value)
+        if num == int(num):
+            return str(int(num))
+        return str(num)
+    except (ValueError, TypeError):
+        return ''

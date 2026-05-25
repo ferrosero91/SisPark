@@ -181,11 +181,18 @@ class TenantBackupService:
             try:
                 model = apps.get_model(app_label, model_name)
                 
-                # Filtrar por tenant
-                if hasattr(model, 'tenant'):
-                    queryset = model.objects.all_tenants().filter(tenant=self.tenant)
-                elif model_name == 'User':
+                # Determinar cómo filtrar por tenant según el modelo
+                if model_name == 'User':
                     queryset = model.objects.filter(tenant=self.tenant)
+                elif model_name == 'ThirdPartyVehicle':
+                    # No tiene campo tenant directo, filtrar por tercero
+                    queryset = model.objects.filter(third_party__tenant=self.tenant)
+                elif model_name == 'ContractVehicle':
+                    # No tiene campo tenant directo, filtrar por contrato
+                    queryset = model.objects.filter(contract__tenant=self.tenant)
+                elif hasattr(model, 'tenant'):
+                    # Modelos con TenantManager
+                    queryset = model.objects.all_tenants().filter(tenant=self.tenant)
                 else:
                     continue
                 
@@ -240,7 +247,6 @@ class TenantBackupService:
         except Exception as e:
             return {'valid': False, 'error': str(e)}
     
-    @transaction.atomic
     def restore_backup(self, filepath, clear_existing=True):
         """Restaura un backup al tenant actual."""
         # Validate backup structure BEFORE any deserialization
@@ -252,31 +258,43 @@ class TenantBackupService:
             with zipfile.ZipFile(filepath, 'r') as zf:
                 backup_data = json.loads(zf.read('backup.json'))
             
+            # Verificar que el backup no esté vacío antes de borrar datos existentes
+            total_records = 0
+            for model_key, data in backup_data.get('models', {}).items():
+                if isinstance(data, list):
+                    total_records += len(data)
+            
+            if total_records == 0 and clear_existing:
+                return {
+                    'success': False, 
+                    'error': 'El backup está vacío (0 registros). No se puede restaurar con limpieza de datos.'
+                }
+            
             results = {'success': True, 'restored': {}, 'errors': []}
             
             if clear_existing:
-                # Eliminar datos existentes (en orden inverso de dependencias)
-                for app_label, model_name in reversed(self.TENANT_MODELS):
-                    try:
-                        model = apps.get_model(app_label, model_name)
-                        if hasattr(model, 'tenant'):
-                            model.objects.all_tenants().filter(tenant=self.tenant).delete()
-                        elif model_name == 'User':
-                            # No eliminar el usuario actual si es admin
-                            model.objects.filter(tenant=self.tenant, is_tenant_admin=False).delete()
-                        elif model_name == 'ThirdPartyVehicle':
-                            # Eliminar vehículos de terceros del tenant
-                            model.objects.filter(third_party__tenant=self.tenant).delete()
-                        elif model_name == 'ContractVehicle':
-                            # Eliminar vehículos de contratos del tenant
-                            model.objects.filter(contract__tenant=self.tenant).delete()
-                        elif model_name == 'ContractPayment':
-                            # ContractPayment tiene tenant FK directo
-                            model.objects.filter(tenant=self.tenant).delete()
-                    except Exception:
-                        pass
+                # Eliminar datos existentes en una transacción atómica
+                with transaction.atomic():
+                    for app_label, model_name in reversed(self.TENANT_MODELS):
+                        try:
+                            model = apps.get_model(app_label, model_name)
+                            if hasattr(model, 'tenant'):
+                                model.objects.all_tenants().filter(tenant=self.tenant).delete()
+                            elif model_name == 'User':
+                                model.objects.filter(tenant=self.tenant, is_tenant_admin=False).delete()
+                            elif model_name == 'ThirdPartyVehicle':
+                                model.objects.filter(third_party__tenant=self.tenant).delete()
+                            elif model_name == 'ContractVehicle':
+                                model.objects.filter(contract__tenant=self.tenant).delete()
+                            elif model_name == 'ContractPayment':
+                                model.objects.filter(tenant=self.tenant).delete()
+                        except Exception:
+                            pass
             
             # Restaurar en orden de dependencias
+            # Mapeo de PKs viejos a nuevos para mantener relaciones
+            pk_mapping = {}  # {model_key: {old_pk: new_pk}}
+            
             for app_label, model_name in self.TENANT_MODELS:
                 model_key = f"{app_label}.{model_name}"
                 data = backup_data.get('models', {}).get(model_key, [])
@@ -287,31 +305,51 @@ class TenantBackupService:
                 try:
                     model = apps.get_model(app_label, model_name)
                     count = 0
+                    pk_mapping[model_key] = {}
                     
                     for item in data:
                         fields = item.get('fields', {})
+                        old_pk = item.get('pk')
                         
                         # Forzar tenant_id al tenant actual en objetos que tienen campo tenant
                         if 'tenant' in fields:
                             fields['tenant'] = str(self.tenant.id)
                         
+                        # Reasignar FKs que apuntan a objetos ya restaurados con nuevos PKs
+                        self._remap_foreign_keys(fields, pk_mapping)
+                        
                         # Manejar usuarios especialmente
                         if model_name == 'User':
                             email = fields.get('email')
                             if email and model.objects.filter(email=email).exists():
+                                # Mapear al usuario existente
+                                existing = model.objects.filter(email=email).first()
+                                pk_mapping[model_key][old_pk] = str(existing.pk)
                                 continue
                         
-                        # Crear objeto con manejo de errores de foreign keys
+                        # Generar nuevo PK para evitar colisiones entre tenants
+                        import uuid as uuid_module
+                        new_pk = str(uuid_module.uuid4())
+                        item['pk'] = new_pk
+                        pk_mapping[model_key][old_pk] = new_pk
+                        
+                        # Crear objeto con manejo de errores
                         try:
                             for obj in serializers.deserialize('json', json.dumps([item])):
-                                # Forzar tenant_id solo si el modelo tiene el campo
                                 if hasattr(obj.object, 'tenant_id'):
                                     obj.object.tenant_id = self.tenant.id
-                                obj.save()
-                                count += 1
+                                try:
+                                    with transaction.atomic():
+                                        obj.save(force_insert=True)
+                                    count += 1
+                                except Exception as save_err:
+                                    logger.warning(
+                                        f"Error guardando objeto en {model_key}: {str(save_err)}. "
+                                        f"Tenant: {self.tenant.slug}. Continuando."
+                                    )
                         except Exception as e:
                             logger.warning(
-                                f"Error restaurando objeto en {model_key}: {str(e)}. "
+                                f"Error deserializando objeto en {model_key}: {str(e)}. "
                                 f"Tenant: {self.tenant.slug}. Continuando."
                             )
                             continue
@@ -325,6 +363,32 @@ class TenantBackupService:
             
         except Exception as e:
             return {'success': False, 'error': str(e)}
+    
+    def _remap_foreign_keys(self, fields, pk_mapping):
+        """
+        Reasigna las foreign keys en los campos para apuntar a los nuevos PKs.
+        Busca en el pk_mapping si algún valor de campo corresponde a un PK viejo.
+        """
+        # Mapeo de campos FK a sus modelos correspondientes
+        fk_model_map = {
+            'third_party': 'third_parties.ThirdParty',
+            'vehicle': 'third_parties.ThirdPartyVehicle',
+            'contract': 'monthly_contracts.MonthlyContract',
+            'category': 'parking.VehicleCategory',
+            'payment_method': 'parking.PaymentMethod',
+            'caja': 'parking.Caja',
+            'turno': 'parking.Turno',
+            'created_by': 'users.User',
+            'received_by': 'users.User',
+            'closed_by': 'users.User',
+        }
+        
+        for field_name, model_key in fk_model_map.items():
+            if field_name in fields and fields[field_name]:
+                old_value = str(fields[field_name])
+                model_pks = pk_mapping.get(model_key, {})
+                if old_value in model_pks:
+                    fields[field_name] = model_pks[old_value]
     
     def list_backups(self):
         """Lista los backups disponibles para este tenant."""
@@ -429,10 +493,14 @@ class SystemBackupService:
             for app_label, model_name in TenantBackupService.TENANT_MODELS:
                 try:
                     model = apps.get_model(app_label, model_name)
-                    if hasattr(model, 'tenant'):
-                        queryset = model.objects.all_tenants().filter(tenant=tenant)
-                    elif model_name == 'User':
+                    if model_name == 'User':
                         queryset = model.objects.filter(tenant=tenant)
+                    elif model_name == 'ThirdPartyVehicle':
+                        queryset = model.objects.filter(third_party__tenant=tenant)
+                    elif model_name == 'ContractVehicle':
+                        queryset = model.objects.filter(contract__tenant=tenant)
+                    elif hasattr(model, 'tenant'):
+                        queryset = model.objects.all_tenants().filter(tenant=tenant)
                     else:
                         continue
                     
