@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.db import IntegrityError
 from .models import ThirdParty, ThirdPartyVehicle
 from .forms import ThirdPartyForm, ThirdPartyVehicleForm
+from permissions.decorators import module_required
 
 
 def get_tenant(request):
@@ -15,6 +16,7 @@ def get_tenant(request):
 
 
 @login_required
+@module_required('third_parties')
 def third_party_list(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -39,6 +41,7 @@ def third_party_list(request):
 
 
 @login_required
+@module_required('third_parties')
 def third_party_create(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -66,6 +69,7 @@ def third_party_create(request):
 
 
 @login_required
+@module_required('third_parties')
 def third_party_detail(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -83,6 +87,7 @@ def third_party_detail(request, pk):
 
 
 @login_required
+@module_required('third_parties')
 def third_party_edit(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -107,6 +112,7 @@ def third_party_edit(request, pk):
 
 
 @login_required
+@module_required('third_parties')
 def vehicle_add(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -133,6 +139,7 @@ def vehicle_add(request, pk):
 
 
 @login_required
+@module_required('third_parties')
 def vehicle_edit(request, pk, vehicle_pk):
     """Editar un vehículo"""
     tenant = get_tenant(request)
@@ -160,6 +167,7 @@ def vehicle_edit(request, pk, vehicle_pk):
 
 
 @login_required
+@module_required('third_parties')
 def vehicle_delete(request, pk, vehicle_pk):
     """Eliminar un vehículo"""
     tenant = get_tenant(request)
@@ -187,6 +195,7 @@ def vehicle_delete(request, pk, vehicle_pk):
 
 
 @login_required
+@module_required('third_parties')
 def third_party_delete(request, pk):
     tenant = get_tenant(request)
     if not tenant:

@@ -259,6 +259,9 @@ if not DEBUG:
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Backup storage (outside MEDIA_ROOT for security)
+BACKUP_ROOT = os.path.join(BASE_DIR, 'private_storage', 'backups')
+
 # ===========================================
 # CRISPY FORMS
 # ===========================================

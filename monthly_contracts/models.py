@@ -402,6 +402,9 @@ class ContractPayment(models.Model):
                 name='unique_payment_per_month'
             )
         ]
+        indexes = [
+            models.Index(fields=['payment_date'], name='idx_payment_date'),
+        ]
     
     def __str__(self):
         return f"Pago ${self.amount} - {self.contract.third_party.full_name} ({self.get_month_name()} {self.payment_year})"

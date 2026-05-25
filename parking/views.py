@@ -1,3 +1,5 @@
+# Tenant Access Pattern: Use Model.objects.all_tenants().filter(tenant=tenant) for explicit filtering
+
 # Python standard library
 from datetime import datetime, timedelta
 
@@ -20,6 +22,7 @@ from django.db.models.functions import TruncDate
 # Django views
 from django.views.generic import CreateView, ListView, TemplateView
 from django.views.generic.edit import DeleteView
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 # Local imports
 from .forms import CategoryForm, ParkingTicketForm
@@ -27,6 +30,10 @@ from .models import ParkingTicket, VehicleCategory, Caja
 
 # Tenant imports
 from tenants.context import get_current_tenant, set_current_tenant
+
+# Permissions
+from permissions.decorators import module_required
+from permissions.mixins import ModuleRequiredMixin
 from third_parties.models import ThirdPartyVehicle
 from monthly_contracts.models import MonthlyContract
 
@@ -44,9 +51,10 @@ def pagina_inicial(request):
     return render(request, 'registration/login.html')
 
 
-class CategoryListView(ListView):
+class CategoryListView(LoginRequiredMixin, ModuleRequiredMixin, ListView):
     model = VehicleCategory
     template_name = 'parking/category_list.html'
+    module_name = 'parking'
     
     def get_queryset(self):
         tenant = get_tenant_from_user(self.request.user)
@@ -55,11 +63,12 @@ class CategoryListView(ListView):
         return VehicleCategory.objects.none()
 
 
-class CategoryCreateView(CreateView):
+class CategoryCreateView(LoginRequiredMixin, ModuleRequiredMixin, CreateView):
     model = VehicleCategory
     form_class = CategoryForm
     template_name = 'parking/category_form.html'
     success_url = reverse_lazy('category-list')
+    module_name = 'parking'
 
     def form_valid(self, form):
         tenant = get_tenant_from_user(self.request.user)
@@ -83,11 +92,12 @@ class CategoryCreateView(CreateView):
         return super().form_invalid(form)
 
 
-class VehicleEntryView(CreateView):
+class VehicleEntryView(LoginRequiredMixin, ModuleRequiredMixin, CreateView):
     model = ParkingTicket
     form_class = ParkingTicketForm
     template_name = 'parking/vehicle_entry.html'
     success_url = reverse_lazy('print-ticket')
+    module_name = 'parking'
 
     def dispatch(self, request, *args, **kwargs):
         # Verificar si tiene turno activo
@@ -152,6 +162,7 @@ class VehicleEntryView(CreateView):
 
 
 @login_required
+@module_required('parking')
 @ensure_csrf_cookie
 def vehicle_exit(request):
     tenant = get_tenant_from_user(request.user)
@@ -204,13 +215,51 @@ def vehicle_exit(request):
                         'marca': ticket.marca or '',
                         'color': ticket.color or '',
                         'third_party': ticket.third_party.full_name if ticket.third_party else None,
+                        'calculated_at': timezone.now().isoformat(),
                     })
             
             # Confirmar salida - ahora sí procesar
             elif action == 'confirm':
                 try:
+                    expected_amount = request.POST.get('expected_amount')
+                    calculated_at = request.POST.get('calculated_at')
+                    
+                    # Verificar tiempo transcurrido desde el cálculo
+                    if calculated_at:
+                        try:
+                            calc_time = datetime.fromisoformat(calculated_at)
+                            if timezone.is_naive(calc_time):
+                                calc_time = timezone.make_aware(calc_time)
+                            elapsed = (timezone.now() - calc_time).total_seconds()
+                            if elapsed > 300:  # 5 minutos
+                                new_amount = ticket.calculate_fee()
+                                return JsonResponse({
+                                    'recalculate': True,
+                                    'new_amount': float(new_amount),
+                                    'message': 'El monto ha sido recalculado por tiempo excedido'
+                                })
+                        except (ValueError, TypeError):
+                            pass
+                    
                     ticket.exit_time = timezone.now()
-                    ticket.amount_paid = ticket.calculate_fee()
+                    actual_amount = ticket.calculate_fee()
+                    
+                    # Validar consistencia del monto
+                    if expected_amount:
+                        try:
+                            diff = abs(float(actual_amount) - float(expected_amount))
+                            threshold = max(float(actual_amount) * 0.10, 500)
+                            if diff > threshold:
+                                ticket.exit_time = None  # Revertir
+                                return JsonResponse({
+                                    'recalculate': True,
+                                    'new_amount': float(actual_amount),
+                                    'message': 'El monto ha cambiado significativamente'
+                                })
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    ticket.amount_paid = actual_amount
                     ticket.save()
                     
                     return JsonResponse({
@@ -234,6 +283,7 @@ def vehicle_exit(request):
 
 
 @login_required
+@module_required('parking')
 def vehicle_payment(request):
     """Vista para procesar el pago de un vehículo"""
     tenant = get_tenant_from_user(request.user)
@@ -280,16 +330,23 @@ def vehicle_payment(request):
         if payment_methods:
             first_is_cash = payment_methods[0].payment_type == 'cash'
     
+    # Pass TOCTOU protection values from search response
+    expected_amount = request.GET.get('expected_amount', '')
+    calculated_at = request.GET.get('calculated_at', '')
+    
     return render(request, 'parking/vehicle_payment.html', {
         'ticket': ticket,
         'duration': duration_str,
         'amount': amount,
         'payment_methods': payment_methods,
-        'first_is_cash': first_is_cash
+        'first_is_cash': first_is_cash,
+        'expected_amount': expected_amount,
+        'calculated_at': calculated_at,
     })
 
 
 @login_required
+@module_required('parking')
 def print_exit_ticket(request):
     tenant = get_tenant_from_user(request.user)
     
@@ -325,10 +382,51 @@ def print_exit_ticket(request):
                 
                 # Si el ticket no tiene exit_time, procesar la salida ahora
                 if not ticket.exit_time:
+                    # TOCTOU protection: check elapsed time and amount consistency
+                    expected_amount = request.POST.get('expected_amount')
+                    calculated_at = request.POST.get('calculated_at')
+                    
+                    if calculated_at:
+                        try:
+                            calc_time = datetime.fromisoformat(calculated_at)
+                            if timezone.is_naive(calc_time):
+                                calc_time = timezone.make_aware(calc_time)
+                            elapsed = (timezone.now() - calc_time).total_seconds()
+                            if elapsed > 300:  # 5 minutos
+                                new_amount = ticket.calculate_fee()
+                                messages.warning(request, f'El monto ha sido recalculado por tiempo excedido. Nuevo monto: ${new_amount:,.0f}')
+                                return redirect(f"{reverse_lazy('vehicle-payment')}?ticket_id={ticket.id}")
+                        except (ValueError, TypeError):
+                            pass
+                    
                     ticket.exit_time = timezone.now()
-                    ticket.amount_paid = ticket.calculate_fee()
+                    actual_amount = ticket.calculate_fee()
+                    
+                    if expected_amount:
+                        try:
+                            diff = abs(float(actual_amount) - float(expected_amount))
+                            threshold = max(float(actual_amount) * 0.10, 500)
+                            if diff > threshold:
+                                ticket.exit_time = None
+                                messages.warning(request, f'El monto ha cambiado significativamente. Nuevo monto: ${actual_amount:,.0f}')
+                                return redirect(f"{reverse_lazy('vehicle-payment')}?ticket_id={ticket.id}")
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    ticket.amount_paid = actual_amount
                     ticket.payment_method = payment_method
                     ticket.save()
+                    
+                    # Audit logging for vehicle exit
+                    from audit.services import AuditService
+                    set_current_tenant(tenant)
+                    AuditService.log(
+                        action='other',
+                        user=request.user,
+                        obj=ticket,
+                        message=f'Salida de vehículo: {ticket.placa} - Monto: ${actual_amount:,.0f}',
+                        request=request
+                    )
                 
                 # Validar y convertir amount_received de forma robusta
                 try:
@@ -445,6 +543,7 @@ def dashboard(request):
 
 
 @login_required
+@module_required('parking')
 def print_ticket(request):
     tenant = get_tenant_from_user(request.user)
     ticket_id = request.GET.get('ticket_id') or request.session.get('ticket_id')
@@ -468,6 +567,9 @@ def print_ticket(request):
             if 'ticket_id' in request.session:
                 del request.session['ticket_id']
             
+            # Clean rate_info from session after use
+            request.session.pop('rate_info', None)
+            
             return render(request, 'parking/print_ticket.html', {
                 'ticket': ticket,
                 'parking_lot': tenant,
@@ -484,8 +586,9 @@ def print_ticket(request):
     return redirect('vehicle-entry')
 
 
-class ReportView(TemplateView):
+class ReportView(LoginRequiredMixin, ModuleRequiredMixin, TemplateView):
     template_name = 'parking/reports.html'
+    module_name = 'parking'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -591,7 +694,7 @@ class ReportView(TemplateView):
         ).order_by('-visits')[:10])
 
         # Mensualidades
-        from monthly_contracts.models import MonthlyContract, ContractPayment
+        from monthly_contracts.models import MonthlyContract, ContractPayment, ContractVehicle
         
         contract_payments = ContractPayment.objects.filter(
             tenant=tenant,
@@ -609,7 +712,29 @@ class ReportView(TemplateView):
             end_date__lt=today_date
         ).select_related('third_party').prefetch_related('vehicles__vehicle') if tenant else []
         
-        pending_total = sum(c.monthly_rate for c in pending_contracts)
+        # Use DB aggregation for pending_total instead of iterating contracts
+        if tenant and pending_contracts:
+            from django.db.models import Q
+            pending_qs = MonthlyContract.objects.all_tenants().filter(
+                tenant=tenant,
+                is_active=True,
+                end_date__lt=today_date
+            )
+            # Sum combo rates
+            combo_total = pending_qs.filter(
+                use_combo_rate=True,
+                combo_rate__isnull=False
+            ).aggregate(total=Sum('combo_rate'))['total'] or Decimal('0')
+            # Sum individual vehicle rates
+            vehicle_total = ContractVehicle.objects.filter(
+                contract__in=pending_qs.filter(
+                    Q(use_combo_rate=False) | Q(combo_rate__isnull=True)
+                ),
+                is_active=True
+            ).aggregate(total=Sum('monthly_rate'))['total'] or Decimal('0')
+            pending_total = combo_total + vehicle_total
+        else:
+            pending_total = Decimal('0')
         
         # Contratos activos
         active_contracts_count = MonthlyContract.objects.all_tenants().filter(
@@ -682,12 +807,14 @@ class ReportView(TemplateView):
 
 @login_required
 def export_report_excel(request):
-    """Exportar reporte completo a Excel con gastos y utilidad"""
+    """Exportar reporte completo a Excel con gastos y utilidad (streaming/write-only mode)"""
     import openpyxl
     from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
     from django.http import HttpResponse
     from collections import defaultdict
     from decimal import Decimal
+    
+    MAX_RECORDS = 50000
     
     tenant = get_tenant_from_user(request.user)
     start_str = request.GET.get('start_date', timezone.now().date().isoformat())
@@ -699,178 +826,81 @@ def export_report_excel(request):
     except ValueError:
         start_date = end_date = timezone.now()
     
-    # Obtener datos de tickets
-    tickets = ParkingTicket.objects.all_tenants().filter(
+    # Obtener datos de tickets with iterator for memory efficiency
+    tickets_qs = ParkingTicket.objects.all_tenants().filter(
         tenant=tenant,
         exit_time__isnull=False,
         exit_time__range=(start_date, end_date)
     ).exclude(amount_paid__isnull=True).select_related('category', 'payment_method').order_by('-exit_time')
     
+    tickets_count = tickets_qs.count()
+    tickets_limited = tickets_count > MAX_RECORDS
+    
     from monthly_contracts.models import ContractPayment, MonthlyContract
-    contract_payments = ContractPayment.objects.filter(
+    contract_payments = list(ContractPayment.objects.filter(
         tenant=tenant,
         payment_date__range=(start_date, end_date),
         is_confirmed=True
-    ).select_related('payment_method', 'contract__third_party').prefetch_related('contract__vehicles__vehicle')
+    ).select_related('payment_method', 'contract__third_party').prefetch_related('contract__vehicles__vehicle'))
     
     # Contratos vencidos
-    pending_contracts = MonthlyContract.objects.all_tenants().filter(
+    pending_contracts = list(MonthlyContract.objects.all_tenants().filter(
         tenant=tenant,
         is_active=True,
         end_date__lt=timezone.now().date()
-    ).select_related('third_party').prefetch_related('vehicles__vehicle')
+    ).select_related('third_party').prefetch_related('vehicles__vehicle'))
     
     # Obtener gastos
     from .models import Expense
-    expenses = Expense.objects.all_tenants().filter(
+    expenses = list(Expense.objects.all_tenants().filter(
         tenant=tenant,
         date__gte=start_date.date(),
         date__lte=end_date.date()
-    ).select_related('category', 'created_by').order_by('-date', '-created_at')
+    ).select_related('category', 'created_by').order_by('-date', '-created_at'))
     
-    # Crear workbook
-    wb = openpyxl.Workbook()
+    # Create workbook in write-only mode for memory efficiency
+    wb = openpyxl.Workbook(write_only=True)
     
-    # Estilos
-    header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", size=10)
-    title_font = Font(bold=True, size=14, color="1E293B")
-    subtitle_font = Font(bold=True, size=11, color="64748B")
-    section_font = Font(bold=True, size=12, color="1E293B")
-    total_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-    total_font = Font(bold=True, size=11)
-    currency_green = Font(bold=True, color="059669")
-    currency_red = Font(bold=True, color="DC2626")
-    expense_fill = PatternFill(start_color="FEF2F2", end_color="FEF2F2", fill_type="solid")
-    profit_fill = PatternFill(start_color="ECFDF5", end_color="ECFDF5", fill_type="solid")
-    border = Border(
-        left=Side(style='thin', color='E2E8F0'),
-        right=Side(style='thin', color='E2E8F0'),
-        top=Side(style='thin', color='E2E8F0'),
-        bottom=Side(style='thin', color='E2E8F0')
-    )
-    
-    # Calcular totales
-    total_tickets = sum(float(t.amount_paid or 0) for t in tickets)
+    # Calculate totals using aggregation where possible
+    total_tickets_amount = float(tickets_qs.aggregate(total=Sum('amount_paid'))['total'] or 0)
     total_contracts = sum(float(p.amount or 0) for p in contract_payments)
     total_pending = sum(float(c.monthly_rate or 0) for c in pending_contracts)
     total_expenses = sum(float(e.amount or 0) for e in expenses)
-    total_income = total_tickets + total_contracts
+    total_income = total_tickets_amount + total_contracts
     net_profit = total_income - total_expenses
     
     # ========== HOJA 1: RESUMEN EJECUTIVO ==========
-    ws1 = wb.active
-    ws1.title = "Resumen Ejecutivo"
+    ws1 = wb.create_sheet("Resumen Ejecutivo")
     
-    # Título
-    ws1.merge_cells('A1:D1')
-    ws1['A1'] = f"REPORTE FINANCIERO - {tenant.name if tenant else 'SoluPark'}"
-    ws1['A1'].font = title_font
-    ws1['A1'].alignment = Alignment(horizontal='center')
+    ws1.append([f"REPORTE FINANCIERO - {tenant.name if tenant else 'SoluPark'}"])
+    ws1.append([f"Período: {start_str} al {end_str}"])
+    ws1.append([f"Generado: {timezone.now().strftime('%d/%m/%Y %H:%M')}"])
+    ws1.append([])
+    ws1.append(["INGRESOS"])
+    ws1.append(['Concepto', 'Cantidad', 'Total'])
+    ws1.append(['Tickets de Parqueadero', min(tickets_count, MAX_RECORDS), total_tickets_amount])
+    ws1.append(['Pagos de Mensualidades', len(contract_payments), total_contracts])
+    ws1.append(['TOTAL INGRESOS', min(tickets_count, MAX_RECORDS) + len(contract_payments), total_income])
+    ws1.append([])
+    ws1.append(["GASTOS"])
     
-    ws1.merge_cells('A2:D2')
-    ws1['A2'] = f"Período: {start_str} al {end_str}"
-    ws1['A2'].font = subtitle_font
-    ws1['A2'].alignment = Alignment(horizontal='center')
-    
-    ws1.merge_cells('A3:D3')
-    ws1['A3'] = f"Generado: {timezone.now().strftime('%d/%m/%Y %H:%M')}"
-    ws1['A3'].font = Font(size=9, color="94A3B8")
-    ws1['A3'].alignment = Alignment(horizontal='center')
-    
-    # ========== SECCIÓN: INGRESOS ==========
-    row = 5
-    ws1[f'A{row}'] = "INGRESOS"
-    ws1[f'A{row}'].font = section_font
-    
-    row += 1
-    headers = ['Concepto', 'Cantidad', 'Total']
-    for col, header in enumerate(headers, 1):
-        cell = ws1.cell(row=row, column=col, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.border = border
-    
-    income_data = [
-        ('Tickets de Parqueadero', tickets.count(), total_tickets),
-        ('Pagos de Mensualidades', contract_payments.count(), total_contracts),
-    ]
-    
-    for item in income_data:
-        row += 1
-        ws1.cell(row=row, column=1, value=item[0]).border = border
-        ws1.cell(row=row, column=2, value=item[1]).border = border
-        cell = ws1.cell(row=row, column=3, value=item[2])
-        cell.number_format = '"$"#,##0'
-        cell.border = border
-    
-    row += 1
-    ws1.cell(row=row, column=1, value='TOTAL INGRESOS').border = border
-    ws1.cell(row=row, column=2, value=tickets.count() + contract_payments.count()).border = border
-    cell = ws1.cell(row=row, column=3, value=total_income)
-    cell.number_format = '"$"#,##0'
-    cell.border = border
-    for c in range(1, 4):
-        ws1.cell(row=row, column=c).fill = total_fill
-        ws1.cell(row=row, column=c).font = total_font
-    
-    # ========== SECCIÓN: GASTOS ==========
-    row += 2
-    ws1[f'A{row}'] = "GASTOS"
-    ws1[f'A{row}'].font = section_font
-    
-    # Agrupar gastos por categoría
     expenses_by_cat = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
     for e in expenses:
         expenses_by_cat[e.category.name]['count'] += 1
         expenses_by_cat[e.category.name]['total'] += e.amount or Decimal('0')
     
-    row += 1
-    headers = ['Categoría', 'Cantidad', 'Total']
-    for col, header in enumerate(headers, 1):
-        cell = ws1.cell(row=row, column=col, value=header)
-        cell.font = header_font
-        cell.fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")
-        cell.border = border
-    
+    ws1.append(['Categoría', 'Cantidad', 'Total'])
     for cat_name, cat_data in sorted(expenses_by_cat.items(), key=lambda x: -float(x[1]['total'])):
-        row += 1
-        ws1.cell(row=row, column=1, value=cat_name).border = border
-        ws1.cell(row=row, column=2, value=cat_data['count']).border = border
-        cell = ws1.cell(row=row, column=3, value=float(cat_data['total']))
-        cell.number_format = '"$"#,##0'
-        cell.border = border
-        cell.font = currency_red
+        ws1.append([cat_name, cat_data['count'], float(cat_data['total'])])
+    ws1.append(['TOTAL GASTOS', len(expenses), total_expenses])
+    ws1.append([])
+    ws1.append(["UTILIDAD NETA (Ingresos - Gastos)", '', net_profit])
+    ws1.append([])
     
-    row += 1
-    ws1.cell(row=row, column=1, value='TOTAL GASTOS').border = border
-    ws1.cell(row=row, column=2, value=expenses.count()).border = border
-    cell = ws1.cell(row=row, column=3, value=total_expenses)
-    cell.number_format = '"$"#,##0'
-    cell.border = border
-    for c in range(1, 4):
-        ws1.cell(row=row, column=c).fill = expense_fill
-        ws1.cell(row=row, column=c).font = Font(bold=True, color="DC2626")
-    
-    # ========== SECCIÓN: UTILIDAD NETA ==========
-    row += 2
-    ws1.merge_cells(f'A{row}:B{row}')
-    ws1[f'A{row}'] = "UTILIDAD NETA (Ingresos - Gastos)"
-    ws1[f'A{row}'].font = Font(bold=True, size=12)
-    cell = ws1.cell(row=row, column=3, value=net_profit)
-    cell.number_format = '"$"#,##0'
-    cell.font = currency_green if net_profit >= 0 else currency_red
-    for c in range(1, 4):
-        ws1.cell(row=row, column=c).fill = profit_fill if net_profit >= 0 else expense_fill
-        ws1.cell(row=row, column=c).border = border
-    
-    # ========== SECCIÓN: MÉTODOS DE PAGO ==========
-    row += 3
-    ws1[f'A{row}'] = "INGRESOS POR MÉTODO DE PAGO"
-    ws1[f'A{row}'].font = section_font
-    
+    # Métodos de pago
+    ws1.append(["INGRESOS POR MÉTODO DE PAGO"])
     payment_summary = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
-    for t in tickets:
+    for t in tickets_qs[:MAX_RECORDS].iterator(chunk_size=1000):
         method = t.payment_method.name if t.payment_method else 'Efectivo'
         payment_summary[method]['count'] += 1
         payment_summary[method]['total'] += t.amount_paid or Decimal('0')
@@ -879,196 +909,92 @@ def export_report_excel(request):
         payment_summary[method]['count'] += 1
         payment_summary[method]['total'] += p.amount or Decimal('0')
     
-    row += 1
-    headers = ['Método de Pago', 'Operaciones', 'Total']
-    for col, header in enumerate(headers, 1):
-        cell = ws1.cell(row=row, column=col, value=header)
-        cell.font = header_font
-        cell.fill = PatternFill(start_color="0EA5E9", end_color="0EA5E9", fill_type="solid")
-        cell.border = border
-    
+    ws1.append(['Método de Pago', 'Operaciones', 'Total'])
     for method, pdata in sorted(payment_summary.items(), key=lambda x: -float(x[1]['total'])):
-        row += 1
-        ws1.cell(row=row, column=1, value=method).border = border
-        ws1.cell(row=row, column=2, value=pdata['count']).border = border
-        cell = ws1.cell(row=row, column=3, value=float(pdata['total']))
-        cell.number_format = '"$"#,##0'
-        cell.border = border
-    
-    # Ajustar anchos
-    ws1.column_dimensions['A'].width = 35
-    ws1.column_dimensions['B'].width = 15
-    ws1.column_dimensions['C'].width = 18
+        ws1.append([method, pdata['count'], float(pdata['total'])])
     
     # ========== HOJA 2: PARQUEADERO ==========
     ws2 = wb.create_sheet("Parqueadero")
+    ws2.append(["DETALLE DE TICKETS DE PARQUEADERO"])
+    ws2.append([])
+    ws2.append(['Fecha', 'Hora Salida', 'Placa', 'Categoría', 'Entrada', 'Duración', 'Método Pago', 'Monto'])
     
-    ws2.merge_cells('A1:H1')
-    ws2['A1'] = "DETALLE DE TICKETS DE PARQUEADERO"
-    ws2['A1'].font = title_font
-    
-    headers = ['Fecha', 'Hora Salida', 'Placa', 'Categoría', 'Entrada', 'Duración', 'Método Pago', 'Monto']
-    for col, header in enumerate(headers, 1):
-        cell = ws2.cell(row=3, column=col, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.border = border
-    
-    row = 3
-    for ticket in tickets:
-        row += 1
+    record_count = 0
+    for ticket in tickets_qs[:MAX_RECORDS].iterator(chunk_size=1000):
         duration = (ticket.exit_time - ticket.entry_time).total_seconds() / 3600
-        ws2.cell(row=row, column=1, value=ticket.exit_time.strftime('%d/%m/%Y')).border = border
-        ws2.cell(row=row, column=2, value=ticket.exit_time.strftime('%H:%M')).border = border
-        ws2.cell(row=row, column=3, value=ticket.placa).border = border
-        ws2.cell(row=row, column=4, value=ticket.category.name if ticket.category else '-').border = border
-        ws2.cell(row=row, column=5, value=ticket.entry_time.strftime('%H:%M')).border = border
-        ws2.cell(row=row, column=6, value=f"{duration:.1f}h").border = border
-        ws2.cell(row=row, column=7, value=ticket.payment_method.name if ticket.payment_method else 'Efectivo').border = border
-        cell = ws2.cell(row=row, column=8, value=float(ticket.amount_paid or 0))
-        cell.number_format = '"$"#,##0'
-        cell.border = border
+        ws2.append([
+            ticket.exit_time.strftime('%d/%m/%Y'),
+            ticket.exit_time.strftime('%H:%M'),
+            ticket.placa,
+            ticket.category.name if ticket.category else '-',
+            ticket.entry_time.strftime('%H:%M'),
+            f"{duration:.1f}h",
+            ticket.payment_method.name if ticket.payment_method else 'Efectivo',
+            float(ticket.amount_paid or 0)
+        ])
+        record_count += 1
     
-    # Total
-    row += 1
-    ws2.cell(row=row, column=7, value="TOTAL").font = total_font
-    cell = ws2.cell(row=row, column=8, value=total_tickets)
-    cell.number_format = '"$"#,##0'
-    cell.font = currency_green
-    
-    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
-        ws2.column_dimensions[col].width = 14
+    if tickets_limited:
+        ws2.append([f'*** NOTA: Se exportaron {MAX_RECORDS} de {tickets_count} registros (límite alcanzado) ***'])
+    ws2.append(['', '', '', '', '', '', 'TOTAL', total_tickets_amount])
     
     # ========== HOJA 3: MENSUALIDADES ==========
     ws3 = wb.create_sheet("Mensualidades")
+    ws3.append(["PAGOS DE MENSUALIDADES"])
+    ws3.append([])
+    ws3.append(['Fecha', 'Cliente', 'Vehículos/Combo', 'Período', 'Método Pago', 'Monto'])
     
-    ws3.merge_cells('A1:F1')
-    ws3['A1'] = "PAGOS DE MENSUALIDADES"
-    ws3['A1'].font = title_font
-    
-    headers = ['Fecha', 'Cliente', 'Vehículos/Combo', 'Período', 'Método Pago', 'Monto']
-    for col, header in enumerate(headers, 1):
-        cell = ws3.cell(row=3, column=col, value=header)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.border = border
-    
-    row = 3
     for payment in contract_payments:
-        row += 1
-        ws3.cell(row=row, column=1, value=payment.payment_date.strftime('%d/%m/%Y %H:%M')).border = border
-        ws3.cell(row=row, column=2, value=str(payment.contract.third_party) if payment.contract else '-').border = border
-        
-        # Vehículos o combo
         if payment.contract and payment.contract.use_combo_rate and payment.contract.combo_name:
             vehicles_text = f"[COMBO] {payment.contract.combo_name}"
         else:
             vehicles_text = payment.contract.vehicles_list if payment.contract else '-'
-        ws3.cell(row=row, column=3, value=vehicles_text).border = border
-        
-        ws3.cell(row=row, column=4, value=f"{payment.get_month_name()} {payment.payment_year}").border = border
-        ws3.cell(row=row, column=5, value=payment.payment_method.name if payment.payment_method else '-').border = border
-        cell = ws3.cell(row=row, column=6, value=float(payment.amount or 0))
-        cell.number_format = '"$"#,##0'
-        cell.border = border
-    
-    # Total
-    row += 1
-    ws3.cell(row=row, column=5, value="TOTAL").font = total_font
-    cell = ws3.cell(row=row, column=6, value=total_contracts)
-    cell.number_format = '"$"#,##0'
-    cell.font = currency_green
-    
-    ws3.column_dimensions['A'].width = 18
-    ws3.column_dimensions['B'].width = 25
-    ws3.column_dimensions['C'].width = 25
-    ws3.column_dimensions['D'].width = 15
-    ws3.column_dimensions['E'].width = 15
-    ws3.column_dimensions['F'].width = 15
+        ws3.append([
+            payment.payment_date.strftime('%d/%m/%Y %H:%M'),
+            str(payment.contract.third_party) if payment.contract else '-',
+            vehicles_text,
+            f"{payment.get_month_name()} {payment.payment_year}",
+            payment.payment_method.name if payment.payment_method else '-',
+            float(payment.amount or 0)
+        ])
+    ws3.append(['', '', '', '', 'TOTAL', total_contracts])
     
     # ========== HOJA 4: GASTOS ==========
     ws4 = wb.create_sheet("Gastos")
+    ws4.append(["DETALLE DE GASTOS"])
+    ws4.append([])
+    ws4.append(['Fecha', 'Categoría', 'Descripción', 'Registrado por', 'Método Pago', 'Monto'])
     
-    ws4.merge_cells('A1:F1')
-    ws4['A1'] = "DETALLE DE GASTOS"
-    ws4['A1'].font = title_font
-    
-    headers = ['Fecha', 'Categoría', 'Descripción', 'Registrado por', 'Método Pago', 'Monto']
-    for col, header in enumerate(headers, 1):
-        cell = ws4.cell(row=3, column=col, value=header)
-        cell.font = header_font
-        cell.fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")
-        cell.border = border
-    
-    row = 3
     for expense in expenses:
-        row += 1
-        ws4.cell(row=row, column=1, value=expense.date.strftime('%d/%m/%Y')).border = border
-        ws4.cell(row=row, column=2, value=expense.category.name).border = border
-        ws4.cell(row=row, column=3, value=expense.description or '-').border = border
-        ws4.cell(row=row, column=4, value=expense.created_by.get_full_name() if expense.created_by else '-').border = border
-        ws4.cell(row=row, column=5, value=expense.payment_method).border = border
-        cell = ws4.cell(row=row, column=6, value=float(expense.amount or 0))
-        cell.number_format = '"$"#,##0'
-        cell.border = border
-    
-    # Total
-    row += 1
-    ws4.cell(row=row, column=5, value="TOTAL GASTOS").font = total_font
-    cell = ws4.cell(row=row, column=6, value=total_expenses)
-    cell.number_format = '"$"#,##0'
-    cell.font = currency_red
-    
-    ws4.column_dimensions['A'].width = 12
-    ws4.column_dimensions['B'].width = 18
-    ws4.column_dimensions['C'].width = 35
-    ws4.column_dimensions['D'].width = 18
-    ws4.column_dimensions['E'].width = 12
-    ws4.column_dimensions['F'].width = 15
+        ws4.append([
+            expense.date.strftime('%d/%m/%Y'),
+            expense.category.name,
+            expense.description or '-',
+            expense.created_by.get_full_name() if expense.created_by else '-',
+            expense.payment_method,
+            float(expense.amount or 0)
+        ])
+    ws4.append(['', '', '', '', 'TOTAL GASTOS', total_expenses])
     
     # ========== HOJA 5: POR COBRAR ==========
     ws5 = wb.create_sheet("Por Cobrar")
+    ws5.append(["CONTRATOS VENCIDOS - CUENTAS POR COBRAR"])
+    ws5.append([])
+    ws5.append(['Cliente', 'Teléfono', 'Vehículos/Combo', 'Vencimiento', 'Tarifa Mensual'])
     
-    ws5.merge_cells('A1:E1')
-    ws5['A1'] = "CONTRATOS VENCIDOS - CUENTAS POR COBRAR"
-    ws5['A1'].font = title_font
-    
-    headers = ['Cliente', 'Teléfono', 'Vehículos/Combo', 'Vencimiento', 'Tarifa Mensual']
-    for col, header in enumerate(headers, 1):
-        cell = ws5.cell(row=3, column=col, value=header)
-        cell.font = header_font
-        cell.fill = PatternFill(start_color="F59E0B", end_color="F59E0B", fill_type="solid")
-        cell.border = border
-    
-    row = 3
     for contract in pending_contracts:
-        row += 1
-        ws5.cell(row=row, column=1, value=contract.third_party.full_name).border = border
-        ws5.cell(row=row, column=2, value=contract.third_party.phone or '-').border = border
-        
         if contract.use_combo_rate and contract.combo_name:
             vehicles_text = f"[COMBO] {contract.combo_name}"
         else:
             vehicles_text = contract.vehicles_list or 'Sin vehículos'
-        ws5.cell(row=row, column=3, value=vehicles_text).border = border
-        
-        ws5.cell(row=row, column=4, value=contract.end_date.strftime('%d/%m/%Y')).border = border
-        cell = ws5.cell(row=row, column=5, value=float(contract.monthly_rate or 0))
-        cell.number_format = '"$"#,##0'
-        cell.border = border
-    
-    # Total
-    row += 1
-    ws5.cell(row=row, column=4, value="TOTAL POR COBRAR").font = total_font
-    cell = ws5.cell(row=row, column=5, value=total_pending)
-    cell.number_format = '"$"#,##0'
-    cell.font = Font(bold=True, color="F59E0B")
-    
-    ws5.column_dimensions['A'].width = 25
-    ws5.column_dimensions['B'].width = 15
-    ws5.column_dimensions['C'].width = 30
-    ws5.column_dimensions['D'].width = 15
-    ws5.column_dimensions['E'].width = 18
+        ws5.append([
+            contract.third_party.full_name,
+            contract.third_party.phone or '-',
+            vehicles_text,
+            contract.end_date.strftime('%d/%m/%Y'),
+            float(contract.monthly_rate or 0)
+        ])
+    ws5.append(['', '', '', 'TOTAL POR COBRAR', total_pending])
     
     # Respuesta
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -1090,6 +1016,8 @@ def export_report_pdf(request):
     from collections import defaultdict
     from decimal import Decimal
     
+    MAX_RECORDS = 50000
+    
     tenant = get_tenant_from_user(request.user)
     start_str = request.GET.get('start_date', timezone.now().date().isoformat())
     end_str = request.GET.get('end_date', timezone.now().date().isoformat())
@@ -1101,13 +1029,21 @@ def export_report_pdf(request):
         start_date = end_date = timezone.now()
     
     # Obtener datos
-    tickets = ParkingTicket.objects.all_tenants().filter(
+    tickets_qs = ParkingTicket.objects.all_tenants().filter(
         tenant=tenant,
         exit_time__isnull=False,
         exit_time__range=(start_date, end_date)
     ).exclude(amount_paid__isnull=True).select_related('category', 'payment_method')
     
-    total_tickets = sum(float(t.amount_paid or 0) for t in tickets)
+    tickets_count = tickets_qs.count()
+    tickets_limited = tickets_count > MAX_RECORDS
+    
+    if tickets_limited:
+        messages.warning(request, f'El reporte tiene {tickets_count} registros. Se exportaron los primeros {MAX_RECORDS}.')
+    
+    # Use iterator for memory efficiency
+    tickets_list = list(tickets_qs[:MAX_RECORDS].iterator(chunk_size=1000))
+    total_tickets = sum(float(t.amount_paid or 0) for t in tickets_list)
     
     from monthly_contracts.models import ContractPayment, MonthlyContract
     contract_payments = ContractPayment.objects.filter(
@@ -1168,9 +1104,9 @@ def export_report_pdf(request):
     
     income_data = [
         ['Concepto', 'Cantidad', 'Total'],
-        ['Tickets de Parqueadero', str(tickets.count()), f"${total_tickets:,.0f}"],
+        ['Tickets de Parqueadero', str(tickets_count), f"${total_tickets:,.0f}"],
         ['Pagos de Mensualidades', str(contract_payments.count()), f"${total_contracts:,.0f}"],
-        ['TOTAL INGRESOS', str(tickets.count() + contract_payments.count()), f"${total_income:,.0f}"],
+        ['TOTAL INGRESOS', str(tickets_count + contract_payments.count()), f"${total_income:,.0f}"],
     ]
     
     income_table = Table(income_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
@@ -1238,7 +1174,7 @@ def export_report_pdf(request):
     elements.append(Paragraph("INGRESOS POR MÉTODO DE PAGO", section_style))
     
     payment_summary = defaultdict(lambda: {'count': 0, 'total': Decimal('0')})
-    for t in tickets:
+    for t in tickets_list:
         method = t.payment_method.name if t.payment_method else 'Efectivo'
         payment_summary[method]['count'] += 1
         payment_summary[method]['total'] += t.amount_paid or Decimal('0')
@@ -1299,12 +1235,12 @@ def export_report_pdf(request):
         elements.append(pending_table)
     
     # ========== DETALLE DE TICKETS (últimos 30) ==========
-    if tickets:
+    if tickets_list:
         elements.append(PageBreak())
         elements.append(Paragraph("DETALLE DE TICKETS DE PARQUEADERO", section_style))
         
         ticket_data = [['Fecha', 'Placa', 'Categoría', 'Método', 'Monto']]
-        for t in tickets[:30]:
+        for t in tickets_list[:30]:
             ticket_data.append([
                 t.exit_time.strftime('%d/%m %H:%M'),
                 t.placa,
@@ -1313,8 +1249,11 @@ def export_report_pdf(request):
                 f"${float(t.amount_paid or 0):,.0f}"
             ])
         
-        if tickets.count() > 30:
-            ticket_data.append([f'... y {tickets.count() - 30} más', '', '', '', ''])
+        if tickets_count > 30:
+            ticket_data.append([f'... y {tickets_count - 30} más', '', '', '', ''])
+        
+        if tickets_limited:
+            ticket_data.append([f'*** Límite de {MAX_RECORDS} registros alcanzado ***', '', '', '', ''])
         
         ticket_data.append(['', '', '', 'TOTAL', f"${total_tickets:,.0f}"])
         
@@ -1454,10 +1393,11 @@ def validate_plate(request, plate):
     return JsonResponse({'exists': exists})
 
 
-class CategoryDeleteView(DeleteView):
+class CategoryDeleteView(LoginRequiredMixin, ModuleRequiredMixin, DeleteView):
     model = VehicleCategory
     success_url = reverse_lazy('category-list')
     template_name = 'parking/category_confirm_delete.html'
+    module_name = 'parking'
 
     def get_queryset(self):
         tenant = get_tenant_from_user(self.request.user)
@@ -1471,6 +1411,7 @@ class CategoryDeleteView(DeleteView):
 
 
 @login_required
+@module_required('parking')
 def cash_register(request):
     tenant = get_tenant_from_user(request.user)
     is_vendedor = request.user.groups.filter(name='Vendedor').exists()
@@ -2185,6 +2126,7 @@ def abrir_turno(request):
 # ========== VISTAS DE GASTOS ==========
 
 @login_required
+@module_required('parking')
 def expense_list(request):
     """Lista de gastos del día o período seleccionado"""
     tenant = get_tenant_from_user(request.user)
@@ -2243,6 +2185,7 @@ def expense_list(request):
 
 
 @login_required
+@module_required('parking')
 def expense_create(request):
     """Crear un nuevo gasto"""
     tenant = get_tenant_from_user(request.user)
@@ -2303,6 +2246,7 @@ def expense_create(request):
 
 
 @login_required
+@module_required('parking')
 def expense_delete(request, pk):
     """Eliminar un gasto"""
     tenant = get_tenant_from_user(request.user)
@@ -2321,6 +2265,7 @@ def expense_delete(request, pk):
 
 
 @login_required
+@module_required('parking')
 def expense_category_list(request):
     """Lista y gestión de categorías de gastos"""
     tenant = get_tenant_from_user(request.user)

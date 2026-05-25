@@ -96,6 +96,8 @@
 
 <script>
 let currentTicketId = null;
+let currentExpectedAmount = null;
+let currentCalculatedAt = null;
 
 function getCookie(name) {
     let cookieValue = null;
@@ -148,6 +150,8 @@ function searchVehicle() {
             document.getElementById('vehicleError').classList.remove('hidden');
         } else {
             currentTicketId = data.ticket_id;
+            currentExpectedAmount = data.amount;
+            currentCalculatedAt = data.calculated_at;
             
             document.getElementById('resultPlaca').textContent = data.placa;
             document.getElementById('resultEntry').textContent = 'Entrada: ' + data.entry_time;
@@ -203,7 +207,14 @@ function searchVehicle() {
 
 function goToPayment() {
     if (currentTicketId) {
-        window.location.href = '{% url "vehicle-payment" %}?ticket_id=' + currentTicketId;
+        let url = '{% url "vehicle-payment" %}?ticket_id=' + currentTicketId;
+        if (currentExpectedAmount !== null) {
+            url += '&expected_amount=' + encodeURIComponent(currentExpectedAmount);
+        }
+        if (currentCalculatedAt) {
+            url += '&calculated_at=' + encodeURIComponent(currentCalculatedAt);
+        }
+        window.location.href = url;
     }
 }
 

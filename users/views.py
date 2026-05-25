@@ -50,8 +50,9 @@ def redirect_after_login(user):
         return redirect('dashboard')
 
 
+@require_http_methods(["POST"])
 def logout_view(request):
-    """Vista de logout"""
+    """Vista de logout - solo acepta POST."""
     logout(request)
     messages.success(request, 'Sesión cerrada correctamente')
     return redirect('login')

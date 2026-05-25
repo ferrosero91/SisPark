@@ -2,7 +2,9 @@
 Servicios de backup y restauración para SoluPark.
 """
 import json
+import logging
 import os
+import re
 import tempfile
 import zipfile
 from datetime import datetime
@@ -14,6 +16,61 @@ from django.conf import settings
 from django.core import serializers
 from django.db import transaction
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
+
+# Tamaño máximo de backup permitido (50MB)
+MAX_BACKUP_SIZE = 50 * 1024 * 1024
+
+# Rate limiting para backups
+MAX_BACKUPS_PER_TENANT = 10
+MIN_BACKUP_INTERVAL_MINUTES = 15
+
+# Patrones SQL prohibidos en restauraciones
+FORBIDDEN_SQL_PATTERNS = [
+    r'\bDROP\s+DATABASE\b',
+    r'\bCREATE\s+USER\b',
+    r'\bCOPY\s+.*\bTO\b',
+    r'\bALTER\s+ROLE\b',
+    r'\bGRANT\b',
+    r'\bCREATE\s+ROLE\b',
+    r'\bDROP\s+ROLE\b',
+]
+
+
+def sanitize_backup_filename(filename, tenant_slug, backup_dir):
+    """
+    Sanitiza y valida un nombre de archivo de backup.
+    
+    1. Extrae solo el nombre base usando os.path.basename()
+    2. Rechaza si el original difiere del basename o contiene '..'
+    3. Valida contra regex del patrón esperado
+    4. Verifica que la ruta resuelta esté dentro del directorio autorizado
+    
+    Returns:
+        El nombre de archivo seguro, o None si la validación falla.
+    """
+    # Extraer solo el nombre base (elimina path traversal)
+    safe_name = os.path.basename(filename)
+    
+    # Rechazar si el original difiere del basename o contiene '..'
+    if safe_name != filename or '..' in filename:
+        return None
+    
+    # Validar patrón esperado
+    pattern = rf'^backup_{re.escape(tenant_slug)}_\d{{8}}_\d{{6}}\.zip$'
+    if not re.match(pattern, safe_name):
+        return None
+    
+    # Verificar que la ruta resuelta está dentro del directorio autorizado
+    filepath = os.path.join(backup_dir, safe_name)
+    real_path = os.path.realpath(filepath)
+    real_backup_dir = os.path.realpath(backup_dir)
+    
+    if not real_path.startswith(real_backup_dir + os.sep):
+        return None
+    
+    return safe_name
 
 
 class BackupEncoder(json.JSONEncoder):
@@ -48,8 +105,55 @@ class TenantBackupService:
     
     def __init__(self, tenant):
         self.tenant = tenant
-        self.backup_dir = os.path.join(settings.MEDIA_ROOT, 'backups')
+        self.backup_dir = os.path.join(settings.BACKUP_ROOT, tenant.slug)
         os.makedirs(self.backup_dir, exist_ok=True)
+    
+    def _validate_backup_structure(self, filepath):
+        """
+        Valida la estructura del archivo de backup antes de restaurar.
+        
+        Checks:
+        1. File size against MAX_BACKUP_SIZE (50MB)
+        2. ZIP only contains backup.json and optionally metadata.json
+        3. backup.json model keys are valid against TENANT_MODELS
+        
+        Returns:
+            Tuple (is_valid: bool, error_message: str or None)
+        """
+        # Check file size
+        file_size = os.path.getsize(filepath)
+        if file_size > MAX_BACKUP_SIZE:
+            return False, f"El archivo excede el tamaño máximo permitido ({MAX_BACKUP_SIZE // (1024*1024)}MB)"
+        
+        try:
+            with zipfile.ZipFile(filepath, 'r') as zf:
+                # Validate allowed files
+                allowed_files = {'backup.json', 'metadata.json'}
+                actual_files = set(zf.namelist())
+                if not actual_files.issubset(allowed_files):
+                    unexpected = actual_files - allowed_files
+                    return False, f"El archivo contiene archivos no permitidos: {unexpected}"
+                
+                if 'backup.json' not in actual_files:
+                    return False, "El archivo no contiene backup.json"
+                
+                # Parse and validate model keys
+                backup_data = json.loads(zf.read('backup.json'))
+                allowed_models = {f"{app}.{model}" for app, model in self.TENANT_MODELS}
+                actual_models = set(backup_data.get('models', {}).keys())
+                
+                if not actual_models.issubset(allowed_models):
+                    invalid_models = actual_models - allowed_models
+                    return False, f"El backup contiene modelos no permitidos: {invalid_models}"
+        
+        except zipfile.BadZipFile:
+            return False, "El archivo no es un ZIP válido"
+        except json.JSONDecodeError:
+            return False, "El archivo backup.json no contiene JSON válido"
+        except Exception as e:
+            return False, f"Error al validar el backup: {str(e)}"
+        
+        return True, None
     
     def create_backup(self):
         """Crea un backup completo del tenant."""
@@ -135,6 +239,11 @@ class TenantBackupService:
     @transaction.atomic
     def restore_backup(self, filepath, clear_existing=True):
         """Restaura un backup al tenant actual."""
+        # Validate backup structure BEFORE any deserialization
+        is_valid, error_message = self._validate_backup_structure(filepath)
+        if not is_valid:
+            return {'success': False, 'error': error_message}
+        
         try:
             with zipfile.ZipFile(filepath, 'r') as zf:
                 backup_data = json.loads(zf.read('backup.json'))
@@ -169,7 +278,7 @@ class TenantBackupService:
                     for item in data:
                         fields = item.get('fields', {})
                         
-                        # Actualizar tenant_id al tenant actual
+                        # Forzar tenant_id al tenant actual en todos los objetos
                         if 'tenant' in fields:
                             fields['tenant'] = str(self.tenant.id)
                         
@@ -180,16 +289,20 @@ class TenantBackupService:
                             if email and model.objects.filter(email=email).exists():
                                 continue
                         
-                        # Crear objeto
+                        # Crear objeto con manejo de errores de foreign keys
                         try:
-                            # Deserializar y guardar
                             for obj in serializers.deserialize('json', json.dumps([item])):
+                                # Forzar tenant_id en el objeto deserializado
                                 obj.object.tenant_id = self.tenant.id
                                 obj.save()
                                 count += 1
-                        except Exception:
-                            # Intentar crear directamente
-                            pass
+                        except Exception as e:
+                            # Log foreign key errors and continue without stopping
+                            logger.warning(
+                                f"Error restaurando objeto en {model_key}: {str(e)}. "
+                                f"Tenant: {self.tenant.slug}. Continuando con siguiente objeto."
+                            )
+                            continue
                     
                     results['restored'][model_key] = count
                     
@@ -228,6 +341,35 @@ class TenantBackupService:
             return True
         return False
 
+    def can_create_backup(self):
+        """
+        Verifica si se puede crear un nuevo backup.
+        
+        Checks:
+        - Si el backup más reciente fue creado hace menos de MIN_BACKUP_INTERVAL_MINUTES minutos
+        
+        Returns:
+            Tuple (can_create: bool, error_message: str or None)
+        """
+        backups = self.list_backups()
+        if backups:
+            last_created = backups[0]['created']
+            elapsed = (datetime.now() - last_created).total_seconds() / 60
+            if elapsed < MIN_BACKUP_INTERVAL_MINUTES:
+                remaining = int(MIN_BACKUP_INTERVAL_MINUTES - elapsed) + 1
+                return False, f"Debe esperar {remaining} minutos antes de crear otro backup"
+        return True, None
+
+    def enforce_backup_limit(self):
+        """
+        Elimina backups antiguos si se excede el límite MAX_BACKUPS_PER_TENANT.
+        Elimina los más antiguos hasta que la cantidad sea menor al límite.
+        """
+        backups = self.list_backups()
+        while len(backups) >= MAX_BACKUPS_PER_TENANT:
+            oldest = backups.pop()
+            self.delete_backup(oldest['filename'])
+
 
 class SystemBackupService:
     """Servicio para backups del sistema completo (SuperAdmin)."""
@@ -240,7 +382,7 @@ class SystemBackupService:
     ]
     
     def __init__(self):
-        self.backup_dir = os.path.join(settings.MEDIA_ROOT, 'backups', 'system')
+        self.backup_dir = os.path.join(settings.BACKUP_ROOT, 'system')
         os.makedirs(self.backup_dir, exist_ok=True)
     
     def create_full_backup(self):
@@ -444,6 +586,18 @@ class SystemBackupService:
                 os.remove(filepath)
             raise e
     
+    def _validate_sql_content(self, sql_content):
+        """
+        Valida que el contenido SQL no contenga sentencias peligrosas.
+        
+        Returns:
+            Tuple (is_valid: bool, error_message: str or None)
+        """
+        for pattern in FORBIDDEN_SQL_PATTERNS:
+            if re.search(pattern, sql_content, re.IGNORECASE):
+                return False, f"SQL contiene sentencia prohibida: {pattern}"
+        return True, None
+    
     def restore_sql_backup(self, filepath):
         """Restaura un backup SQL."""
         import subprocess
@@ -468,9 +622,21 @@ class SystemBackupService:
                     if not sql_files:
                         raise Exception("No se encontró archivo SQL en el backup")
                     
+                    # Read and validate SQL content
+                    sql_content = zf.read(sql_files[0]).decode('utf-8', errors='replace')
+                    is_valid, error_msg = self._validate_sql_content(sql_content)
+                    if not is_valid:
+                        logger.warning(
+                            f"SQL restore rejected - forbidden pattern detected: {error_msg}. "
+                            f"File: {filepath}"
+                        )
+                        return {'success': False, 'error': f"Restauración rechazada: {error_msg}"}
+                    
+                    logger.info(f"SQL restore initiated. File: {filepath}")
+                    
                     import tempfile
                     with tempfile.NamedTemporaryFile(mode='wb', suffix='.sql', delete=False) as tmp:
-                        tmp.write(zf.read(sql_files[0]))
+                        tmp.write(sql_content.encode('utf-8'))
                         tmp_path = tmp.name
                     
                     try:
@@ -492,6 +658,7 @@ class SystemBackupService:
                         if result.returncode != 0:
                             raise Exception(f"psql error: {result.stderr}")
                         
+                        logger.info(f"SQL restore completed successfully. File: {filepath}")
                         return {'success': True, 'message': 'Base de datos restaurada correctamente'}
                     finally:
                         os.unlink(tmp_path)
@@ -501,6 +668,8 @@ class SystemBackupService:
                         raise Exception("El backup no es compatible con SQLite")
                     
                     db_path = db_settings.get('NAME', '')
+                    
+                    logger.info(f"SQLite restore initiated. File: {filepath}")
                     
                     # Hacer backup del actual antes de restaurar
                     if os.path.exists(db_path):
@@ -515,11 +684,13 @@ class SystemBackupService:
                         import shutil
                         shutil.move(extracted, db_path)
                     
+                    logger.info(f"SQLite restore completed successfully. File: {filepath}")
                     return {'success': True, 'message': 'Base de datos restaurada correctamente'}
                 else:
                     raise Exception(f"Motor de base de datos no soportado: {db_engine}")
                     
         except Exception as e:
+            logger.error(f"SQL restore failed. File: {filepath}. Error: {str(e)}")
             return {'success': False, 'error': str(e)}
     
     def list_sql_backups(self):

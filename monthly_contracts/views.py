@@ -1,16 +1,44 @@
+# Tenant Access Pattern: Use Model.objects.all_tenants().filter(tenant=tenant) for explicit filtering
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse
 from django.db.models import Sum
+from django.db import transaction
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from .models import MonthlyContract, ContractVehicle, ContractPayment
 from .forms import MonthlyContractForm, ContractVehicleForm, ContractPaymentForm
 from third_parties.models import ThirdParty, ThirdPartyVehicle
 from parking.models import VehicleCategory
 from parking.models_config import PaymentMethod
+from permissions.decorators import module_required
+
+
+def safe_decimal(value, field_name):
+    """
+    Safely convert a value to Decimal with validation.
+    
+    Returns:
+        tuple: (Decimal value, None) on success, or (None, error_message) on failure.
+    """
+    if value is None or str(value).strip() == '':
+        return None, f"El campo '{field_name}' es requerido."
+    try:
+        decimal_value = Decimal(str(value).strip())
+    except (ValueError, InvalidOperation):
+        return None, f"El campo '{field_name}' debe ser un número válido."
+    
+    if decimal_value < 0:
+        return None, f"El campo '{field_name}' debe ser un valor positivo."
+    
+    # Check it doesn't exceed 10 digits total
+    if decimal_value >= Decimal('10000000000'):  # 10^10
+        return None, f"El campo '{field_name}' excede el máximo permitido (10 dígitos)."
+    
+    return decimal_value, None
 
 
 def get_tenant(request):
@@ -21,6 +49,7 @@ def get_tenant(request):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_list(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -60,6 +89,7 @@ def contract_list(request):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_create(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -89,7 +119,11 @@ def contract_create(request):
                     try:
                         vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
                         category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
-                        rate = Decimal(rates[i]) if i < len(rates) and rates[i] else Decimal('0')
+                        rate_value, rate_error = safe_decimal(
+                            rates[i] if i < len(rates) and rates[i] else '0',
+                            'tarifa'
+                        )
+                        rate = rate_value if rate_value is not None else Decimal('0')
                         
                         ContractVehicle.objects.create(
                             contract=contract,
@@ -128,6 +162,7 @@ def contract_create(request):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_detail(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -196,6 +231,7 @@ def contract_detail(request, pk):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_edit(request, pk):
     """Editar un contrato"""
     tenant = get_tenant(request)
@@ -208,30 +244,35 @@ def contract_edit(request, pk):
     if request.method == 'POST':
         form = MonthlyContractForm(request.POST, instance=contract, tenant=tenant)
         if form.is_valid():
-            form.save()
-            
-            # Eliminar vehículos existentes y recrear
-            contract.vehicles.all().delete()
-            
-            vehicle_ids = request.POST.getlist('vehicle_id')
-            category_ids = request.POST.getlist('vehicle_category')
-            rates = request.POST.getlist('vehicle_rate')
-            
-            for i, vehicle_id in enumerate(vehicle_ids):
-                if vehicle_id:
-                    try:
-                        vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
-                        category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
-                        rate = Decimal(rates[i]) if i < len(rates) and rates[i] else Decimal('0')
-                        
-                        ContractVehicle.objects.create(
-                            contract=contract,
-                            vehicle=vehicle,
-                            category=category,
-                            monthly_rate=rate
-                        )
-                    except (ThirdPartyVehicle.DoesNotExist, VehicleCategory.DoesNotExist, ValueError):
-                        continue
+            with transaction.atomic():
+                form.save()
+                
+                # Eliminar vehículos existentes y recrear
+                contract.vehicles.all().delete()
+                
+                vehicle_ids = request.POST.getlist('vehicle_id')
+                category_ids = request.POST.getlist('vehicle_category')
+                rates = request.POST.getlist('vehicle_rate')
+                
+                for i, vehicle_id in enumerate(vehicle_ids):
+                    if vehicle_id:
+                        try:
+                            vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+                            category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
+                            rate_value, rate_error = safe_decimal(
+                                rates[i] if i < len(rates) and rates[i] else '0',
+                                'tarifa'
+                            )
+                            rate = rate_value if rate_value is not None else Decimal('0')
+                            
+                            ContractVehicle.objects.create(
+                                contract=contract,
+                                vehicle=vehicle,
+                                category=category,
+                                monthly_rate=rate
+                            )
+                        except (ThirdPartyVehicle.DoesNotExist, VehicleCategory.DoesNotExist, ValueError):
+                            continue
             
             messages.success(request, 'Contrato actualizado exitosamente')
             return redirect('contract_detail', pk=pk)
@@ -247,6 +288,7 @@ def contract_edit(request, pk):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_delete(request, pk):
     """Eliminar un contrato"""
     tenant = get_tenant(request)
@@ -267,6 +309,7 @@ def contract_delete(request, pk):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_payment(request, pk):
     """Vista para registrar un pago de contrato para un mes específico"""
     tenant = get_tenant(request)
@@ -323,32 +366,53 @@ def contract_payment(request, pk):
     
     if request.method == 'POST':
         payment_method_id = request.POST.get('payment_method')
-        amount = Decimal(request.POST.get('amount', contract.monthly_rate))
+        amount_raw = request.POST.get('amount', contract.monthly_rate)
+        amount, amount_error = safe_decimal(amount_raw, 'monto')
+        if amount_error:
+            messages.error(request, amount_error)
+            return redirect('contract_payment', pk=pk)
+        
         amount_received = request.POST.get('amount_received')
         reference = request.POST.get('reference', '')
         notes = request.POST.get('notes', '')
         
         try:
-            payment = ContractPayment(
-                contract=contract,
-                tenant=tenant,
-                payment_method_id=payment_method_id if payment_method_id else None,
-                amount=amount,
-                payment_month=payment_month,
-                payment_year=payment_year,
-                reference=reference,
-                notes=notes,
-                received_by=request.user,
-                is_confirmed=True
-            )
-            
-            if amount_received:
-                payment.amount_received = Decimal(amount_received)
-            
-            payment.save()
+            with transaction.atomic():
+                payment = ContractPayment(
+                    contract=contract,
+                    tenant=tenant,
+                    payment_method_id=payment_method_id if payment_method_id else None,
+                    amount=amount,
+                    payment_month=payment_month,
+                    payment_year=payment_year,
+                    reference=reference,
+                    notes=notes,
+                    received_by=request.user,
+                    is_confirmed=True
+                )
+                
+                if amount_received:
+                    received_value, received_error = safe_decimal(amount_received, 'monto recibido')
+                    if received_value is not None:
+                        payment.amount_received = received_value
+                
+                payment.save()
             
             month_names = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
                            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            
+            # Audit logging for contract payment
+            from audit.services import AuditService
+            from tenants.context import set_current_tenant
+            set_current_tenant(tenant)
+            AuditService.log(
+                action='create',
+                user=request.user,
+                obj=payment,
+                message=f'Pago de contrato: ${amount:,.0f} - {contract.third_party.full_name} ({month_names[payment_month]} {payment_year})',
+                request=request
+            )
+            
             messages.success(request, f'Pago de ${amount:,.0f} registrado para {month_names[payment_month]} {payment_year}')
             return redirect('contract_detail', pk=pk)
             
@@ -369,12 +433,14 @@ def contract_payment(request, pk):
 
 
 @login_required
+@module_required('monthly_contracts')
 def contract_renew(request, pk):
     """Vista para renovar un contrato (alias de payment)"""
     return contract_payment(request, pk)
 
 
 @login_required
+@module_required('monthly_contracts')
 def pending_payments(request):
     """Vista de cuentas por cobrar / contratos pendientes"""
     tenant = get_tenant(request)
@@ -403,6 +469,8 @@ def pending_payments(request):
         status='pending'
     ).select_related('third_party').prefetch_related('vehicles__vehicle').order_by('-created_at')
     
+    # Prefetch vehicles are already loaded, so monthly_rate property won't cause N+1
+    # for contracts using combo_rate. For individual rates, vehicles are prefetched.
     total_expired = sum(c.monthly_rate for c in expired)
     total_expiring = sum(c.monthly_rate for c in expiring)
     total_pending = sum(c.monthly_rate for c in pending)
@@ -419,6 +487,7 @@ def pending_payments(request):
 
 
 @login_required
+@module_required('monthly_contracts')
 def payment_history(request):
     """Historial de todos los pagos de mensualidades"""
     tenant = get_tenant(request)
@@ -451,6 +520,7 @@ def payment_history(request):
 
 
 @login_required
+@module_required('monthly_contracts')
 def print_payment_receipt(request, payment_id):
     """Imprimir recibo de pago"""
     tenant = get_tenant(request)
@@ -468,6 +538,7 @@ def print_payment_receipt(request, payment_id):
 
 
 @login_required
+@module_required('monthly_contracts')
 def payment_edit(request, payment_id):
     """Editar un pago - Solo administradores"""
     tenant = get_tenant(request)
@@ -517,6 +588,7 @@ def payment_edit(request, payment_id):
 
 
 @login_required
+@module_required('monthly_contracts')
 def payment_delete(request, payment_id):
     """Eliminar un pago - Solo administradores"""
     tenant = get_tenant(request)
@@ -546,6 +618,7 @@ def payment_delete(request, payment_id):
 
 
 @login_required
+@module_required('monthly_contracts')
 def get_client_vehicles(request):
     """API para obtener vehículos de un cliente"""
     tenant = get_tenant(request)
@@ -564,6 +637,7 @@ def get_client_vehicles(request):
 
 
 @login_required
+@module_required('monthly_contracts')
 def add_contract_vehicle(request, pk):
     """Agregar un vehículo a un contrato existente"""
     tenant = get_tenant(request)
@@ -583,7 +657,7 @@ def add_contract_vehicle(request, pk):
     if request.method == 'POST':
         vehicle_id = request.POST.get('vehicle')
         category_id = request.POST.get('category')
-        rate = request.POST.get('monthly_rate')
+        rate_raw = request.POST.get('monthly_rate')
         
         try:
             vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
@@ -592,17 +666,28 @@ def add_contract_vehicle(request, pk):
                 category = VehicleCategory.objects.all_tenants().get(pk=category_id)
                 # Verificar que pertenece al tenant
                 if category.tenant_id != tenant.id:
-                    raise VehicleCategory.DoesNotExist(f"Categoría {category_id} no pertenece al tenant {tenant.name}")
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Categoría {category_id} no pertenece al tenant {tenant.name}")
+                    raise VehicleCategory.DoesNotExist("La categoría seleccionada no está disponible")
             except VehicleCategory.DoesNotExist:
-                # Listar categorías disponibles para debug
+                # Log details internally, show generic message to user
+                import logging
+                logger = logging.getLogger(__name__)
                 available_cats = list(VehicleCategory.objects.all_tenants().filter(tenant=tenant).values_list('id', 'name'))
-                raise VehicleCategory.DoesNotExist(f"Categoría ID={category_id} no encontrada. Disponibles: {available_cats}")
+                logger.error(f"Categoría ID={category_id} no encontrada para tenant {tenant.name}. Disponibles: {available_cats}")
+                raise VehicleCategory.DoesNotExist("La categoría seleccionada no está disponible")
+            
+            rate_value, rate_error = safe_decimal(rate_raw, 'tarifa mensual')
+            if rate_error:
+                messages.error(request, rate_error)
+                return redirect('contract_detail', pk=pk)
             
             ContractVehicle.objects.create(
                 contract=contract,
                 vehicle=vehicle,
                 category=category,
-                monthly_rate=Decimal(rate)
+                monthly_rate=rate_value
             )
             messages.success(request, f'Vehículo {vehicle.plate} agregado al contrato')
         except Exception as e:
@@ -618,6 +703,7 @@ def add_contract_vehicle(request, pk):
 
 
 @login_required
+@module_required('monthly_contracts')
 def remove_contract_vehicle(request, pk, vehicle_pk):
     """Eliminar un vehículo de un contrato"""
     tenant = get_tenant(request)

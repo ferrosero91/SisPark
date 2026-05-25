@@ -1,39 +1,39 @@
 """
-Gestión del contexto de tenant usando thread-local storage.
+Gestión del contexto de tenant usando contextvars.
 Permite acceder al tenant actual desde cualquier parte del código.
+Compatible con async y threading.
 """
-import threading
+import contextvars
 from contextlib import contextmanager
 
-# Thread-local storage para el tenant actual
-_thread_locals = threading.local()
+# ContextVar for the current tenant (async-safe replacement for threading.local)
+_current_tenant: contextvars.ContextVar = contextvars.ContextVar('current_tenant', default=None)
 
 
 def get_current_tenant():
     """
-    Obtiene el tenant actual del contexto de thread.
+    Obtiene el tenant actual del contexto.
     Retorna None si no hay tenant establecido.
     """
-    return getattr(_thread_locals, 'tenant', None)
+    return _current_tenant.get()
 
 
 def set_current_tenant(tenant):
     """
-    Establece el tenant actual en el contexto de thread.
+    Establece el tenant actual en el contexto.
     
     Args:
         tenant: Instancia de Tenant o None
     """
-    _thread_locals.tenant = tenant
+    _current_tenant.set(tenant)
 
 
 def clear_current_tenant():
     """
-    Limpia el tenant del contexto de thread.
+    Limpia el tenant del contexto.
     Debe llamarse al finalizar cada request.
     """
-    if hasattr(_thread_locals, 'tenant'):
-        del _thread_locals.tenant
+    _current_tenant.set(None)
 
 
 @contextmanager
@@ -50,15 +50,11 @@ def tenant_context(tenant):
     Args:
         tenant: Instancia de Tenant
     """
-    previous_tenant = get_current_tenant()
-    set_current_tenant(tenant)
+    token = _current_tenant.set(tenant)
     try:
         yield
     finally:
-        if previous_tenant:
-            set_current_tenant(previous_tenant)
-        else:
-            clear_current_tenant()
+        _current_tenant.reset(token)
 
 
 def get_current_tenant_id():

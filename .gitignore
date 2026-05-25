@@ -34,6 +34,9 @@ staticfiles/
 media/barcodes/
 media/backups/
 
+# Private storage (backups outside MEDIA_ROOT)
+private_storage/
+
 # IDE
 .vscode/
 .idea/

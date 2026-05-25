@@ -53,6 +53,8 @@
         <input type="hidden" name="amount_received" id="hiddenAmountReceived" value="{{ amount|default:0 }}">
         <input type="hidden" name="payment_method" id="hiddenPaymentMethod" value="">
         <input type="hidden" name="is_cash" id="hiddenIsCash" value="0">
+        <input type="hidden" name="expected_amount" value="{{ expected_amount }}">
+        <input type="hidden" name="calculated_at" value="{{ calculated_at }}">
         
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             <div class="p-6 border-b border-slate-100">

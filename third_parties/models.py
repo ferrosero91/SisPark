@@ -191,6 +191,9 @@ class ThirdPartyVehicle(models.Model):
         verbose_name = "Vehículo"
         verbose_name_plural = "Vehículos"
         ordering = ['-is_primary', 'plate']
+        indexes = [
+            models.Index(fields=['plate'], name='idx_vehicle_plate'),
+        ]
     
     def __str__(self):
         return f"{self.plate} - {self.get_vehicle_type_display()}"

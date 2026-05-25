@@ -1,11 +1,16 @@
+# Tenant Access Pattern: Use Model.objects.all_tenants().filter(tenant=tenant) for explicit filtering
+
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import IntegrityError
 from parking.models_config import PaymentMethod
 from parking.models import VehicleCategory
 from users.models import User
 from tenants.models import Tenant
+from permissions.decorators import tenant_admin_required
+from .forms import ParkingInfoForm
+from audit.services import AuditService
+from tenants.context import set_current_tenant
 
 
 def get_tenant(request):
@@ -14,7 +19,7 @@ def get_tenant(request):
     return None
 
 
-@login_required
+@tenant_admin_required
 def config_dashboard(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -34,30 +39,46 @@ def config_dashboard(request):
     })
 
 
-@login_required
+@tenant_admin_required
 def parking_info(request):
     tenant = get_tenant(request)
     if not tenant:
         return redirect('dashboard')
     
     if request.method == 'POST':
-        tenant.name = request.POST.get('name', tenant.name)
-        tenant.business_name = request.POST.get('business_name', tenant.business_name)
-        tenant.nit = request.POST.get('nit', tenant.nit)
-        tenant.phone = request.POST.get('phone', tenant.phone)
-        tenant.email = request.POST.get('email', tenant.email)
-        tenant.address = request.POST.get('address', tenant.address)
-        tenant.city = request.POST.get('city', tenant.city)
-        tenant.save()
-        messages.success(request, 'Información actualizada correctamente')
-        return redirect('config_parking_info')
+        form = ParkingInfoForm(request.POST)
+        if form.is_valid():
+            tenant.name = form.cleaned_data['name']
+            tenant.business_name = form.cleaned_data['business_name']
+            tenant.nit = form.cleaned_data['nit']
+            tenant.phone = form.cleaned_data['phone']
+            tenant.email = form.cleaned_data['email']
+            tenant.address = form.cleaned_data['address']
+            tenant.city = form.cleaned_data['city']
+            tenant.save()
+            messages.success(request, 'Información actualizada correctamente')
+            return redirect('config_parking_info')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f'{error}')
+    else:
+        form = ParkingInfoForm(initial={
+            'name': tenant.name,
+            'business_name': tenant.business_name,
+            'nit': tenant.nit,
+            'phone': tenant.phone,
+            'email': tenant.email,
+            'address': tenant.address,
+            'city': tenant.city,
+        })
     
-    return render(request, 'config/parking_info.html', {'tenant': tenant})
+    return render(request, 'config/parking_info.html', {'tenant': tenant, 'form': form})
 
 
 # ============ MÉTODOS DE PAGO ============
 
-@login_required
+@tenant_admin_required
 def payment_method_list(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -67,7 +88,7 @@ def payment_method_list(request):
     return render(request, 'config/payment_methods/list.html', {'methods': methods})
 
 
-@login_required
+@tenant_admin_required
 def payment_method_create(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -96,7 +117,7 @@ def payment_method_create(request):
     })
 
 
-@login_required
+@tenant_admin_required
 def payment_method_edit(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -124,7 +145,7 @@ def payment_method_edit(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required
 def payment_method_delete(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -142,14 +163,14 @@ def payment_method_delete(request, pk):
 
 # ============ CATEGORÍAS ============
 
-@login_required
+@tenant_admin_required
 def category_list_config(request):
     return redirect('category-list')
 
 
 # ============ USUARIOS ============
 
-@login_required  
+@tenant_admin_required  
 def user_list(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -159,7 +180,7 @@ def user_list(request):
     return render(request, 'config/users/list.html', {'users': users})
 
 
-@login_required
+@tenant_admin_required
 def user_create(request):
     tenant = get_tenant(request)
     if not tenant:
@@ -197,6 +218,16 @@ def user_create(request):
                             can_delete=True
                         )
             
+            # Audit logging
+            set_current_tenant(tenant)
+            AuditService.log(
+                action='create',
+                user=request.user,
+                obj=user,
+                message=f'Usuario creado: {user.get_full_name()} ({user.email})',
+                request=request
+            )
+            
             messages.success(request, f'Usuario {user.get_full_name()} creado')
             return redirect('config_users')
     
@@ -206,7 +237,7 @@ def user_create(request):
     })
 
 
-@login_required
+@tenant_admin_required
 def user_edit(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -257,6 +288,16 @@ def user_edit(request, pk):
         # Invalidar caché de permisos
         PermissionService.invalidate_user_cache(user.id)
         
+        # Audit logging
+        set_current_tenant(tenant)
+        AuditService.log(
+            action='update',
+            user=request.user,
+            obj=user,
+            message=f'Usuario editado: {user.get_full_name()} ({user.email})',
+            request=request
+        )
+        
         messages.success(request, 'Usuario actualizado')
         return redirect('config_users')
     
@@ -268,7 +309,7 @@ def user_edit(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required
 def user_delete(request, pk):
     tenant = get_tenant(request)
     if not tenant:
@@ -282,7 +323,18 @@ def user_delete(request, pk):
     
     if request.method == 'POST':
         name = user.get_full_name()
+        email = user.email
         user.delete()
+        
+        # Audit logging
+        set_current_tenant(tenant)
+        AuditService.log(
+            action='delete',
+            user=request.user,
+            message=f'Usuario eliminado: {name} ({email})',
+            request=request
+        )
+        
         messages.success(request, f'Usuario {name} eliminado')
         return redirect('config_users')
     
@@ -292,12 +344,12 @@ def user_delete(request, pk):
 # ============ BACKUP Y RESTAURACIÓN ============
 
 import os
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, JsonResponse, HttpResponseBadRequest
 from django.core.files.storage import default_storage
-from .services import TenantBackupService
+from .services import TenantBackupService, sanitize_backup_filename
 
 
-@login_required
+@tenant_admin_required
 def backup_dashboard(request):
     """Dashboard de copias de seguridad del tenant."""
     tenant = get_tenant(request)
@@ -323,7 +375,7 @@ def backup_dashboard(request):
     })
 
 
-@login_required
+@tenant_admin_required
 def backup_create(request):
     """Crear una nueva copia de seguridad."""
     tenant = get_tenant(request)
@@ -333,7 +385,26 @@ def backup_create(request):
     if request.method == 'POST':
         try:
             service = TenantBackupService(tenant)
+            
+            # Rate limiting: check if backup can be created
+            can_create, error_message = service.can_create_backup()
+            if not can_create:
+                messages.error(request, error_message)
+                return redirect('backup_dashboard')
+            
             filepath, filename = service.create_backup()
+            
+            # Enforce backup limit: clean up old backups
+            service.enforce_backup_limit()
+            
+            # Audit logging
+            set_current_tenant(tenant)
+            AuditService.log(
+                action='create',
+                user=request.user,
+                message=f'Backup creado: {filename}',
+                request=request
+            )
             
             messages.success(request, f'Copia de seguridad "{filename}" creada exitosamente')
             return redirect('backup_dashboard')
@@ -344,29 +415,34 @@ def backup_create(request):
     return redirect('backup_dashboard')
 
 
-@login_required
+@tenant_admin_required
 def backup_download(request, filename):
     """Descargar una copia de seguridad."""
     tenant = get_tenant(request)
     if not tenant:
         return JsonResponse({'error': 'No autorizado'}, status=403)
     
-    # Verificar que el archivo pertenece al tenant
-    if not filename.startswith(f"backup_{tenant.slug}_"):
+    service = TenantBackupService(tenant)
+    
+    # Sanitizar y validar el nombre de archivo
+    safe_filename = sanitize_backup_filename(filename, tenant.slug, service.backup_dir)
+    if safe_filename is None:
+        # Determinar si es path traversal (400) o patrón inválido (404)
+        if '/' in filename or '\\' in filename or '..' in filename:
+            return HttpResponseBadRequest('Nombre de archivo no válido')
         return JsonResponse({'error': 'Archivo no encontrado'}, status=404)
     
-    service = TenantBackupService(tenant)
-    filepath = os.path.join(service.backup_dir, filename)
+    filepath = os.path.join(service.backup_dir, safe_filename)
     
     if not os.path.exists(filepath):
         messages.error(request, 'Archivo no encontrado')
         return redirect('backup_dashboard')
     
-    response = FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filename)
+    response = FileResponse(open(filepath, 'rb'), as_attachment=True, filename=safe_filename)
     return response
 
 
-@login_required
+@tenant_admin_required
 def backup_delete(request, filename):
     """Eliminar una copia de seguridad."""
     tenant = get_tenant(request)
@@ -375,7 +451,24 @@ def backup_delete(request, filename):
     
     if request.method == 'POST':
         service = TenantBackupService(tenant)
-        if service.delete_backup(filename):
+        
+        # Sanitizar y validar el nombre de archivo
+        safe_filename = sanitize_backup_filename(filename, tenant.slug, service.backup_dir)
+        if safe_filename is None:
+            if '/' in filename or '\\' in filename or '..' in filename:
+                return HttpResponseBadRequest('Nombre de archivo no válido')
+            messages.error(request, 'Archivo no encontrado')
+            return redirect('backup_dashboard')
+        
+        if service.delete_backup(safe_filename):
+            # Audit logging
+            set_current_tenant(tenant)
+            AuditService.log(
+                action='delete',
+                user=request.user,
+                message=f'Backup eliminado: {safe_filename}',
+                request=request
+            )
             messages.success(request, 'Copia de seguridad eliminada')
         else:
             messages.error(request, 'No se pudo eliminar el archivo')
@@ -383,24 +476,29 @@ def backup_delete(request, filename):
     return redirect('backup_dashboard')
 
 
-@login_required
+@tenant_admin_required
 def backup_info(request, filename):
     """Obtener información de un backup."""
     tenant = get_tenant(request)
     if not tenant:
         return JsonResponse({'error': 'No autorizado'}, status=403)
     
-    if not filename.startswith(f"backup_{tenant.slug}_"):
+    service = TenantBackupService(tenant)
+    
+    # Sanitizar y validar el nombre de archivo
+    safe_filename = sanitize_backup_filename(filename, tenant.slug, service.backup_dir)
+    if safe_filename is None:
+        if '/' in filename or '\\' in filename or '..' in filename:
+            return HttpResponseBadRequest('Nombre de archivo no válido')
         return JsonResponse({'error': 'Archivo no encontrado'}, status=404)
     
-    service = TenantBackupService(tenant)
-    filepath = os.path.join(service.backup_dir, filename)
+    filepath = os.path.join(service.backup_dir, safe_filename)
     
     info = service.get_backup_info(filepath)
     return JsonResponse(info)
 
 
-@login_required
+@tenant_admin_required
 def backup_restore(request):
     """Restaurar desde una copia de seguridad."""
     tenant = get_tenant(request)
@@ -411,12 +509,18 @@ def backup_restore(request):
         # Restaurar desde archivo existente
         filename = request.POST.get('filename')
         if filename:
-            if not filename.startswith(f"backup_{tenant.slug}_"):
-                messages.error(request, 'Archivo no válido')
+            service = TenantBackupService(tenant)
+            
+            # Sanitizar y validar el nombre de archivo
+            safe_filename = sanitize_backup_filename(filename, tenant.slug, service.backup_dir)
+            if safe_filename is None:
+                if '/' in filename or '\\' in filename or '..' in filename:
+                    messages.error(request, 'Nombre de archivo no válido')
+                else:
+                    messages.error(request, 'Archivo no válido')
                 return redirect('backup_dashboard')
             
-            service = TenantBackupService(tenant)
-            filepath = os.path.join(service.backup_dir, filename)
+            filepath = os.path.join(service.backup_dir, safe_filename)
             
             if not os.path.exists(filepath):
                 messages.error(request, 'Archivo no encontrado')
@@ -427,6 +531,14 @@ def backup_restore(request):
             
             if result.get('success'):
                 total = sum(result.get('restored', {}).values())
+                # Audit logging
+                set_current_tenant(tenant)
+                AuditService.log(
+                    action='update',
+                    user=request.user,
+                    message=f'Backup restaurado: {safe_filename} ({total} registros)',
+                    request=request
+                )
                 messages.success(request, f'Restauración completada. {total} registros restaurados.')
             else:
                 messages.error(request, f'Error en restauración: {result.get("error", "Error desconocido")}')
@@ -449,10 +561,10 @@ def backup_restore(request):
             try:
                 service = TenantBackupService(tenant)
                 
-                # Verificar que es un backup válido
-                info = service.get_backup_info(tmp_path)
-                if not info.get('valid'):
-                    messages.error(request, 'Archivo de backup no válido')
+                # Validate backup structure before restoration
+                is_valid, error_message = service._validate_backup_structure(tmp_path)
+                if not is_valid:
+                    messages.error(request, f'Archivo de backup no válido: {error_message}')
                     os.unlink(tmp_path)
                     return redirect('backup_dashboard')
                 
@@ -461,6 +573,14 @@ def backup_restore(request):
                 
                 if result.get('success'):
                     total = sum(result.get('restored', {}).values())
+                    # Audit logging
+                    set_current_tenant(tenant)
+                    AuditService.log(
+                        action='update',
+                        user=request.user,
+                        message=f'Backup restaurado desde archivo subido ({total} registros)',
+                        request=request
+                    )
                     messages.success(request, f'Restauración completada. {total} registros restaurados.')
                 else:
                     messages.error(request, f'Error: {result.get("error", "Error desconocido")}')

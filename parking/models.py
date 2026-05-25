@@ -1,6 +1,8 @@
-from django.db import models
+from django.db import models, connection
+from django.db.models import Max
 import uuid
 import math
+import logging
 from django.utils import timezone
 from datetime import timedelta
 from io import BytesIO
@@ -11,6 +13,8 @@ import base64
 from barcode import Code128
 
 from tenants.managers import TenantModel, TenantManager
+
+logger = logging.getLogger(__name__)
 
 # Importar modelos de configuración
 from .models_config import PaymentMethod, Currency
@@ -188,6 +192,9 @@ class ParkingTicket(TenantModel):
                 name='unique_active_plate_per_tenant'
             )
         ]
+        indexes = [
+            models.Index(fields=['placa'], name='idx_ticket_placa'),
+        ]
 
     def __str__(self):
         return f"{self.placa} - {self.entry_time.strftime('%Y-%m-%d %H:%M')}"
@@ -209,22 +216,70 @@ class ParkingTicket(TenantModel):
         return f'data:image/png;base64,{base64_data}'
 
     def generate_ticket_number(self):
-        """Genera número de ticket único por tenant"""
+        """
+        Genera número de ticket único por tenant usando operación atómica.
+        Usa pg_advisory_xact_lock en PostgreSQL para prevenir race conditions.
+        En SQLite (desarrollo), usa la lógica simple ya que SQLite serializa escrituras.
+        Formato: YYYYMMDD-NNNN
+        Reintenta hasta 3 veces en caso de conflictos.
+        """
         today = timezone.now()
         prefix = today.strftime('%Y%m%d')
         
-        # Contar tickets del día para este tenant
-        if self.tenant_id:
-            count = ParkingTicket.objects.filter(
-                tenant=self.tenant,
-                entry_time__date=today.date()
-            ).count()
-        else:
-            count = ParkingTicket.objects.filter(
-                entry_time__date=today.date()
-            ).count()
+        db_engine = connection.vendor  # 'postgresql', 'sqlite', etc.
         
-        return f"{prefix}-{count + 1:04d}"
+        for attempt in range(3):
+            try:
+                if db_engine == 'postgresql':
+                    # Usar advisory lock por tenant+fecha para evitar race conditions
+                    lock_id = hash(f"{self.tenant_id}_{prefix}") % (2**31 - 1)
+                    
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_id])
+                    
+                    # Obtener el MAX ticket_number para este tenant+fecha
+                    last_number = ParkingTicket.objects.filter(
+                        tenant=self.tenant,
+                        entry_time__date=today.date()
+                    ).aggregate(max_num=Max('ticket_number'))['max_num']
+                    
+                    if last_number and last_number.startswith(prefix):
+                        try:
+                            seq = int(last_number.split('-')[1]) + 1
+                        except (IndexError, ValueError):
+                            seq = 1
+                    else:
+                        seq = 1
+                else:
+                    # SQLite (desarrollo) - lógica simple, SQLite serializa escrituras
+                    last_number = ParkingTicket.objects.filter(
+                        tenant=self.tenant,
+                        entry_time__date=today.date()
+                    ).aggregate(max_num=Max('ticket_number'))['max_num']
+                    
+                    if last_number and last_number.startswith(prefix):
+                        try:
+                            seq = int(last_number.split('-')[1]) + 1
+                        except (IndexError, ValueError):
+                            seq = 1
+                    else:
+                        seq = 1
+                
+                return f"{prefix}-{seq:04d}"
+                
+            except Exception as e:
+                if attempt < 2:
+                    logger.warning(
+                        f"Ticket number generation attempt {attempt + 1} failed for "
+                        f"tenant {self.tenant_id}: {str(e)}. Retrying..."
+                    )
+                    continue
+                else:
+                    logger.error(
+                        f"Ticket number generation failed after 3 attempts for "
+                        f"tenant {self.tenant_id}: {str(e)}"
+                    )
+                    raise
 
     def save(self, *args, **kwargs):
         # Generar número de ticket si no existe (después de asignar tenant)

@@ -345,9 +345,9 @@ def get_contract_summary(tenant) -> Dict[str, Any]:
     Returns:
         Diccionario con estadísticas de contratos
     """
-    from monthly_contracts.models import MonthlyContract
-    from django.db.models import Sum, Count
-    
+    from monthly_contracts.models import MonthlyContract, ContractVehicle
+    from django.db.models import Sum, Count, Case, When, F, Q, Value, DecimalField
+
     today = timezone.now().date()
     
     contracts = MonthlyContract.objects.all_tenants().filter(
@@ -355,9 +355,25 @@ def get_contract_summary(tenant) -> Dict[str, Any]:
         is_active=True
     )
     
-    # Calcular ingresos mensuales sumando las tarifas de cada contrato
+    # Use DB aggregation instead of iterating contracts for monthly_revenue
+    # Contracts using combo_rate use that value; others sum their vehicles' rates
     active_contracts = contracts.filter(status='active')
-    monthly_revenue = sum(c.monthly_rate for c in active_contracts)
+    
+    # Sum combo rates for contracts that use combo pricing
+    combo_revenue = active_contracts.filter(
+        use_combo_rate=True,
+        combo_rate__isnull=False
+    ).aggregate(total=Sum('combo_rate'))['total'] or Decimal('0')
+    
+    # Sum individual vehicle rates for contracts that don't use combo pricing
+    vehicle_revenue = ContractVehicle.objects.filter(
+        contract__in=active_contracts.filter(
+            Q(use_combo_rate=False) | Q(combo_rate__isnull=True)
+        ),
+        is_active=True
+    ).aggregate(total=Sum('monthly_rate'))['total'] or Decimal('0')
+    
+    monthly_revenue = combo_revenue + vehicle_revenue
     
     return {
         'total_active': active_contracts.count(),
