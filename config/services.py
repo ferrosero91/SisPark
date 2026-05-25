@@ -92,15 +92,19 @@ class TenantBackupService:
     TENANT_MODELS = [
         ('parking', 'VehicleCategory'),
         ('parking', 'PaymentMethod'),
+        ('parking', 'Currency'),
+        ('users', 'User'),
         ('third_parties', 'ThirdParty'),
         ('third_parties', 'ThirdPartyVehicle'),
         ('monthly_contracts', 'MonthlyContract'),
         ('monthly_contracts', 'ContractVehicle'),
         ('monthly_contracts', 'ContractPayment'),
         ('parking', 'ParkingTicket'),
+        ('parking', 'ExpenseCategory'),
         ('parking', 'Caja'),
+        ('parking', 'Turno'),
         ('parking', 'CashMovement'),
-        ('users', 'User'),
+        ('parking', 'Expense'),
     ]
     
     def __init__(self, tenant):
@@ -251,7 +255,7 @@ class TenantBackupService:
             results = {'success': True, 'restored': {}, 'errors': []}
             
             if clear_existing:
-                # Eliminar datos existentes (en orden inverso)
+                # Eliminar datos existentes (en orden inverso de dependencias)
                 for app_label, model_name in reversed(self.TENANT_MODELS):
                     try:
                         model = apps.get_model(app_label, model_name)
@@ -260,6 +264,15 @@ class TenantBackupService:
                         elif model_name == 'User':
                             # No eliminar el usuario actual si es admin
                             model.objects.filter(tenant=self.tenant, is_tenant_admin=False).delete()
+                        elif model_name == 'ThirdPartyVehicle':
+                            # Eliminar vehículos de terceros del tenant
+                            model.objects.filter(third_party__tenant=self.tenant).delete()
+                        elif model_name == 'ContractVehicle':
+                            # Eliminar vehículos de contratos del tenant
+                            model.objects.filter(contract__tenant=self.tenant).delete()
+                        elif model_name == 'ContractPayment':
+                            # ContractPayment tiene tenant FK directo
+                            model.objects.filter(tenant=self.tenant).delete()
                     except Exception:
                         pass
             
@@ -278,13 +291,12 @@ class TenantBackupService:
                     for item in data:
                         fields = item.get('fields', {})
                         
-                        # Forzar tenant_id al tenant actual en todos los objetos
+                        # Forzar tenant_id al tenant actual en objetos que tienen campo tenant
                         if 'tenant' in fields:
                             fields['tenant'] = str(self.tenant.id)
                         
                         # Manejar usuarios especialmente
                         if model_name == 'User':
-                            # Verificar si el usuario ya existe
                             email = fields.get('email')
                             if email and model.objects.filter(email=email).exists():
                                 continue
@@ -292,15 +304,15 @@ class TenantBackupService:
                         # Crear objeto con manejo de errores de foreign keys
                         try:
                             for obj in serializers.deserialize('json', json.dumps([item])):
-                                # Forzar tenant_id en el objeto deserializado
-                                obj.object.tenant_id = self.tenant.id
+                                # Forzar tenant_id solo si el modelo tiene el campo
+                                if hasattr(obj.object, 'tenant_id'):
+                                    obj.object.tenant_id = self.tenant.id
                                 obj.save()
                                 count += 1
                         except Exception as e:
-                            # Log foreign key errors and continue without stopping
                             logger.warning(
                                 f"Error restaurando objeto en {model_key}: {str(e)}. "
-                                f"Tenant: {self.tenant.slug}. Continuando con siguiente objeto."
+                                f"Tenant: {self.tenant.slug}. Continuando."
                             )
                             continue
                     
