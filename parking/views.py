@@ -54,7 +54,7 @@ def pagina_inicial(request):
 class CategoryListView(LoginRequiredMixin, ModuleRequiredMixin, ListView):
     model = VehicleCategory
     template_name = 'parking/category_list.html'
-    module_name = 'parking'
+    module_name = 'categories'
     
     def get_queryset(self):
         tenant = get_tenant_from_user(self.request.user)
@@ -68,7 +68,7 @@ class CategoryCreateView(LoginRequiredMixin, ModuleRequiredMixin, CreateView):
     form_class = CategoryForm
     template_name = 'parking/category_form.html'
     success_url = reverse_lazy('category-list')
-    module_name = 'parking'
+    module_name = 'categories'
 
     def form_valid(self, form):
         tenant = get_tenant_from_user(self.request.user)
@@ -97,7 +97,7 @@ class VehicleEntryView(LoginRequiredMixin, ModuleRequiredMixin, CreateView):
     form_class = ParkingTicketForm
     template_name = 'parking/vehicle_entry.html'
     success_url = reverse_lazy('print-ticket')
-    module_name = 'parking'
+    module_name = 'parking_entry'
 
     def dispatch(self, request, *args, **kwargs):
         # Verificar si tiene turno activo
@@ -162,7 +162,7 @@ class VehicleEntryView(LoginRequiredMixin, ModuleRequiredMixin, CreateView):
 
 
 @login_required
-@module_required('parking')
+@module_required('parking_exit')
 @ensure_csrf_cookie
 def vehicle_exit(request):
     tenant = get_tenant_from_user(request.user)
@@ -283,7 +283,7 @@ def vehicle_exit(request):
 
 
 @login_required
-@module_required('parking')
+@module_required('parking_exit')
 def vehicle_payment(request):
     """Vista para procesar el pago de un vehículo"""
     tenant = get_tenant_from_user(request.user)
@@ -346,7 +346,7 @@ def vehicle_payment(request):
 
 
 @login_required
-@module_required('parking')
+@module_required('parking_exit')
 def print_exit_ticket(request):
     tenant = get_tenant_from_user(request.user)
     
@@ -543,7 +543,7 @@ def dashboard(request):
 
 
 @login_required
-@module_required('parking')
+@module_required('parking_entry')
 def print_ticket(request):
     tenant = get_tenant_from_user(request.user)
     ticket_id = request.GET.get('ticket_id') or request.session.get('ticket_id')
@@ -588,7 +588,7 @@ def print_ticket(request):
 
 class ReportView(LoginRequiredMixin, ModuleRequiredMixin, TemplateView):
     template_name = 'parking/reports.html'
-    module_name = 'parking'
+    module_name = 'reports'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1397,7 +1397,7 @@ class CategoryDeleteView(LoginRequiredMixin, ModuleRequiredMixin, DeleteView):
     model = VehicleCategory
     success_url = reverse_lazy('category-list')
     template_name = 'parking/category_confirm_delete.html'
-    module_name = 'parking'
+    module_name = 'categories'
 
     def get_queryset(self):
         tenant = get_tenant_from_user(self.request.user)
@@ -1411,7 +1411,7 @@ class CategoryDeleteView(LoginRequiredMixin, ModuleRequiredMixin, DeleteView):
 
 
 @login_required
-@module_required('parking')
+@module_required('cash_register')
 def cash_register(request):
     tenant = get_tenant_from_user(request.user)
     is_vendedor = request.user.groups.filter(name='Vendedor').exists()
@@ -2126,7 +2126,7 @@ def abrir_turno(request):
 # ========== VISTAS DE GASTOS ==========
 
 @login_required
-@module_required('parking')
+@module_required('expenses')
 def expense_list(request):
     """Lista de gastos del día o período seleccionado"""
     tenant = get_tenant_from_user(request.user)
@@ -2185,7 +2185,7 @@ def expense_list(request):
 
 
 @login_required
-@module_required('parking')
+@module_required('expenses')
 def expense_create(request):
     """Crear un nuevo gasto"""
     tenant = get_tenant_from_user(request.user)
@@ -2246,7 +2246,7 @@ def expense_create(request):
 
 
 @login_required
-@module_required('parking')
+@module_required('expenses')
 def expense_delete(request, pk):
     """Eliminar un gasto"""
     tenant = get_tenant_from_user(request.user)
@@ -2265,7 +2265,7 @@ def expense_delete(request, pk):
 
 
 @login_required
-@module_required('parking')
+@module_required('expenses')
 def expense_category_list(request):
     """Lista y gestión de categorías de gastos"""
     tenant = get_tenant_from_user(request.user)

@@ -190,16 +190,35 @@ def user_create(request):
     modules = Module.objects.filter(is_active=True, parent__isnull=True).order_by('order')
     
     if request.method == 'POST':
-        email = request.POST.get('email')
+        email = request.POST.get('email', '').strip()
+        password = request.POST.get('password', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        
+        # Validaciones básicas
+        if not email:
+            messages.error(request, 'El email es obligatorio')
+            return render(request, 'config/users/form.html', {'title': 'Nuevo Usuario', 'modules': modules})
+        if not password:
+            messages.error(request, 'La contraseña es obligatoria')
+            return render(request, 'config/users/form.html', {'title': 'Nuevo Usuario', 'modules': modules})
+        if not first_name:
+            messages.error(request, 'El nombre es obligatorio')
+            return render(request, 'config/users/form.html', {'title': 'Nuevo Usuario', 'modules': modules})
+        if len(password) < 6:
+            messages.error(request, 'La contraseña debe tener al menos 6 caracteres')
+            return render(request, 'config/users/form.html', {'title': 'Nuevo Usuario', 'modules': modules})
+        
         if User.objects.filter(email=email).exists():
             messages.error(request, 'Ya existe un usuario con ese email')
         else:
             user = User.objects.create_user(
                 email=email,
-                password=request.POST.get('password'),
-                first_name=request.POST.get('first_name'),
-                last_name=request.POST.get('last_name'),
-                phone=request.POST.get('phone', ''),
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
                 tenant=tenant,
                 is_tenant_admin=request.POST.get('is_admin') == 'on'
             )
