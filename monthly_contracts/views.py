@@ -117,7 +117,7 @@ def contract_create(request):
             for i, vehicle_id in enumerate(vehicle_ids):
                 if vehicle_id:
                     try:
-                        vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+                        vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id, third_party__tenant=tenant)
                         category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
                         rate_value, rate_error = safe_decimal(
                             rates[i] if i < len(rates) and rates[i] else '0',
@@ -257,7 +257,7 @@ def contract_edit(request, pk):
                 for i, vehicle_id in enumerate(vehicle_ids):
                     if vehicle_id:
                         try:
-                            vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+                            vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id, third_party__tenant=tenant)
                             category = VehicleCategory.objects.all_tenants().get(pk=category_ids[i], tenant=tenant) if i < len(category_ids) and category_ids[i] else None
                             rate_value, rate_error = safe_decimal(
                                 rates[i] if i < len(rates) and rates[i] else '0',
@@ -660,7 +660,7 @@ def add_contract_vehicle(request, pk):
         rate_raw = request.POST.get('monthly_rate')
         
         try:
-            vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id)
+            vehicle = ThirdPartyVehicle.objects.get(pk=vehicle_id, third_party__tenant=tenant)
             # Buscar categoría sin filtro de tenant primero para debug
             try:
                 category = VehicleCategory.objects.all_tenants().get(pk=category_id)
