@@ -180,7 +180,7 @@ class Tenant(models.Model):
     def is_accessible(self):
         """
         Verifica si el tenant puede ser accedido por sus usuarios.
-        Retorna False si está suspendido, inactivo o el trial expiró.
+        Retorna False si está suspendido, inactivo, el trial expiró o la suscripción venció.
         """
         if not self.is_active:
             return False
@@ -193,6 +193,11 @@ class Tenant(models.Model):
         
         if self.status == self.Status.TRIAL and self.trial_ends_at:
             if timezone.now() > self.trial_ends_at:
+                return False
+        
+        # Verificar si la suscripción ha expirado
+        if self.subscription_end and self.status == self.Status.ACTIVE:
+            if timezone.now().date() > self.subscription_end:
                 return False
         
         return True
@@ -211,6 +216,11 @@ class Tenant(models.Model):
         if self.status == self.Status.TRIAL and self.trial_ends_at:
             if timezone.now() > self.trial_ends_at:
                 return "El período de prueba ha expirado."
+        
+        # Suscripción vencida
+        if self.subscription_end and self.status == self.Status.ACTIVE:
+            if timezone.now().date() > self.subscription_end:
+                return "La suscripción ha vencido. Contacte al administrador para renovar."
         
         return None
     

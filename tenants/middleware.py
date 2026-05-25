@@ -23,7 +23,6 @@ class TenantMiddleware:
     
     # URLs que no requieren tenant (públicas)
     PUBLIC_URLS = [
-        '/',
         '/login/',
         '/logout/',
         '/accounts/login/',
@@ -44,7 +43,10 @@ class TenantMiddleware:
         
         # Verificar si es URL pública
         path = request.path
-        is_public = any(path.startswith(url) for url in self.PUBLIC_URLS)
+        is_public = (
+            path == '/' or 
+            any(path.startswith(url) for url in self.PUBLIC_URLS)
+        )
         
         # Si es URL pública, no verificar tenant
         if is_public:

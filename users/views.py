@@ -22,6 +22,32 @@ def login_view(request):
             messages.error(request, 'Por favor ingrese email y contraseña')
             return render(request, 'users/login.html')
         
+        # Verificar si el usuario existe y su tenant está suspendido
+        # (antes de authenticate, para dar un mensaje específico)
+        from users.models import User as UserModel
+        try:
+            check_user = UserModel.objects.get(email__iexact=email)
+            if check_user.tenant and not check_user.is_superadmin:
+                if not check_user.tenant.is_accessible():
+                    reason = check_user.tenant.get_suspension_reason()
+                    messages.error(
+                        request, 
+                        f'Acceso denegado: {reason or "Cuenta suspendida."} '
+                        f'Contacte al administrador del sistema.'
+                    )
+                    return render(request, 'users/login.html')
+            # Verificar si la cuenta está bloqueada por intentos fallidos
+            if check_user.is_locked():
+                remaining = check_user.get_lock_remaining_time()
+                messages.error(
+                    request,
+                    f'Cuenta bloqueada por múltiples intentos fallidos. '
+                    f'Intente de nuevo en {remaining} minuto(s).'
+                )
+                return render(request, 'users/login.html')
+        except UserModel.DoesNotExist:
+            pass  # Continuar con authenticate normal (no revelar si el email existe)
+        
         user = authenticate(request, username=email, password=password)
         
         if user is not None:
