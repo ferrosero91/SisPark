@@ -185,14 +185,17 @@ class TenantBackupService:
                 if model_name == 'User':
                     queryset = model.objects.filter(tenant=self.tenant)
                 elif model_name == 'ThirdPartyVehicle':
-                    # No tiene campo tenant directo, filtrar por tercero
                     queryset = model.objects.filter(third_party__tenant=self.tenant)
                 elif model_name == 'ContractVehicle':
-                    # No tiene campo tenant directo, filtrar por contrato
                     queryset = model.objects.filter(contract__tenant=self.tenant)
-                elif hasattr(model, 'tenant'):
+                elif model_name == 'ContractPayment':
+                    queryset = model.objects.filter(tenant=self.tenant)
+                elif hasattr(model.objects, 'all_tenants'):
                     # Modelos con TenantManager
                     queryset = model.objects.all_tenants().filter(tenant=self.tenant)
+                elif hasattr(model, 'tenant'):
+                    # Modelos con campo tenant pero sin TenantManager
+                    queryset = model.objects.filter(tenant=self.tenant)
                 else:
                     continue
                 
@@ -278,15 +281,17 @@ class TenantBackupService:
                     for app_label, model_name in reversed(self.TENANT_MODELS):
                         try:
                             model = apps.get_model(app_label, model_name)
-                            if hasattr(model, 'tenant'):
-                                model.objects.all_tenants().filter(tenant=self.tenant).delete()
-                            elif model_name == 'User':
+                            if model_name == 'User':
                                 model.objects.filter(tenant=self.tenant, is_tenant_admin=False).delete()
                             elif model_name == 'ThirdPartyVehicle':
                                 model.objects.filter(third_party__tenant=self.tenant).delete()
                             elif model_name == 'ContractVehicle':
                                 model.objects.filter(contract__tenant=self.tenant).delete()
                             elif model_name == 'ContractPayment':
+                                model.objects.filter(tenant=self.tenant).delete()
+                            elif hasattr(model.objects, 'all_tenants'):
+                                model.objects.all_tenants().filter(tenant=self.tenant).delete()
+                            elif hasattr(model, 'tenant'):
                                 model.objects.filter(tenant=self.tenant).delete()
                         except Exception:
                             pass
@@ -329,18 +334,36 @@ class TenantBackupService:
                         
                         # Generar nuevo PK para evitar colisiones entre tenants
                         import uuid as uuid_module
-                        new_pk = str(uuid_module.uuid4())
-                        item['pk'] = new_pk
-                        pk_mapping[model_key][old_pk] = new_pk
+                        from django.db.models import UUIDField
+                        
+                        pk_field = model._meta.pk
+                        is_uuid_pk = isinstance(pk_field, UUIDField)
+                        
+                        if is_uuid_pk:
+                            # Modelo usa UUID como PK - generar nuevo UUID
+                            new_pk = str(uuid_module.uuid4())
+                            item['pk'] = new_pk
+                            pk_mapping[model_key][old_pk] = new_pk
+                        else:
+                            # Modelo usa AutoField/BigAutoField - quitar PK para auto-asignar
+                            pk_mapping[model_key][old_pk] = old_pk  # temporal
                         
                         # Crear objeto con manejo de errores
                         try:
                             for obj in serializers.deserialize('json', json.dumps([item])):
                                 if hasattr(obj.object, 'tenant_id'):
                                     obj.object.tenant_id = self.tenant.id
+                                
+                                # Si PK es auto-generado, limpiar para que Django asigne uno nuevo
+                                if not is_uuid_pk:
+                                    obj.object.pk = None
+                                
                                 try:
                                     with transaction.atomic():
                                         obj.save(force_insert=True)
+                                    # Actualizar el mapping con el PK real asignado
+                                    if old_pk and not is_uuid_pk:
+                                        pk_mapping[model_key][old_pk] = str(obj.object.pk)
                                     count += 1
                                 except Exception as save_err:
                                     logger.warning(
@@ -499,8 +522,12 @@ class SystemBackupService:
                         queryset = model.objects.filter(third_party__tenant=tenant)
                     elif model_name == 'ContractVehicle':
                         queryset = model.objects.filter(contract__tenant=tenant)
-                    elif hasattr(model, 'tenant'):
+                    elif model_name == 'ContractPayment':
+                        queryset = model.objects.filter(tenant=tenant)
+                    elif hasattr(model.objects, 'all_tenants'):
                         queryset = model.objects.all_tenants().filter(tenant=tenant)
+                    elif hasattr(model, 'tenant'):
+                        queryset = model.objects.filter(tenant=tenant)
                     else:
                         continue
                     
