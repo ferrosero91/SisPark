@@ -397,6 +397,7 @@ class TenantBackupService:
             'third_party': 'third_parties.ThirdParty',
             'vehicle': 'third_parties.ThirdPartyVehicle',
             'contract': 'monthly_contracts.MonthlyContract',
+            'monthly_contract': 'monthly_contracts.MonthlyContract',
             'category': 'parking.VehicleCategory',
             'payment_method': 'parking.PaymentMethod',
             'caja': 'parking.Caja',
@@ -404,6 +405,7 @@ class TenantBackupService:
             'created_by': 'users.User',
             'received_by': 'users.User',
             'closed_by': 'users.User',
+            'user': 'users.User',
         }
         
         for field_name, model_key in fk_model_map.items():
@@ -411,7 +413,9 @@ class TenantBackupService:
                 old_value = str(fields[field_name])
                 model_pks = pk_mapping.get(model_key, {})
                 if old_value in model_pks:
-                    fields[field_name] = model_pks[old_value]
+                    new_value = model_pks[old_value]
+                    if new_value is not None:
+                        fields[field_name] = new_value
     
     def list_backups(self):
         """Lista los backups disponibles para este tenant."""
