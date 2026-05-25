@@ -97,6 +97,21 @@
 <script>
 let currentTicketId = null;
 
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
 function searchVehicle() {
     const placa = document.getElementById('searchPlate').value.trim().toUpperCase();
     if (!placa) return;
@@ -104,17 +119,31 @@ function searchVehicle() {
     document.getElementById('vehicleResult').classList.add('hidden');
     document.getElementById('vehicleError').classList.add('hidden');
     
+    const csrftoken = getCookie('csrftoken') || '{{ csrf_token }}';
+    
     fetch('{% url "vehicle-exit" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': '{{ csrf_token }}'
+            'X-CSRFToken': csrftoken
         },
-        body: 'identifier=' + encodeURIComponent(placa)
+        body: 'identifier=' + encodeURIComponent(placa) + '&action=search'
     })
-    .then(r => r.json())
+    .then(r => {
+        if (r.status === 403) {
+            // Error CSRF - recargar página para obtener nuevo token
+            alert('Sesión expirada. La página se recargará.');
+            window.location.reload();
+            return null;
+        }
+        if (!r.ok) {
+            return r.json().catch(() => ({ error: 'Error del servidor' }));
+        }
+        return r.json();
+    })
     .then(data => {
+        if (!data) return;
         if (data.error) {
             document.getElementById('vehicleError').classList.remove('hidden');
         } else {

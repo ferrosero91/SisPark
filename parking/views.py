@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.timezone import now
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 # Django database
 from django.db.models import Avg, Count, F, Sum
@@ -151,6 +152,7 @@ class VehicleEntryView(CreateView):
 
 
 @login_required
+@ensure_csrf_cookie
 def vehicle_exit(request):
     tenant = get_tenant_from_user(request.user)
     

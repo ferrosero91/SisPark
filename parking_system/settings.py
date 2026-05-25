@@ -34,6 +34,20 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 # CSRF Trusted Origins (necesario para proxy reverso)
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+# Filtrar valores vacíos
+CSRF_TRUSTED_ORIGINS = [origin for origin in CSRF_TRUSTED_ORIGINS if origin]
+
+# En desarrollo, agregar orígenes locales automáticamente
+if DEBUG:
+    local_origins = [
+        'http://127.0.0.1:8000',
+        'http://localhost:8000',
+        'http://127.0.0.1',
+        'http://localhost',
+    ]
+    for origin in local_origins:
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
 
 if not DEBUG:
     # HTTPS/SSL
