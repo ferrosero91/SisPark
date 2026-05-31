@@ -3,6 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
+import importlib
 from parking import views
 from parking.views import (
     CategoryListView, CategoryCreateView,
@@ -64,3 +65,9 @@ urlpatterns = [
     path('gastos/<uuid:pk>/eliminar/', expense_delete, name='expense_delete'),
     path('gastos/categorias/', expense_category_list, name='expense_category_list'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# URLs del módulo desktop (solo en modo desktop)
+if getattr(settings, 'DESKTOP_MODE', False):
+    urlpatterns += [
+        path('api/sync/', include('desktop.urls')),
+    ]

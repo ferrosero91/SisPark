@@ -1,0 +1,3 @@
+Coloca aquí el archivo icon.ico para el ejecutable.
+Tamaño recomendado: 256x256 píxeles.
+Puedes generar uno en: https://www.favicon-generator.org/

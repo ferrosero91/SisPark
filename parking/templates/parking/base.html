@@ -45,6 +45,11 @@
 <body class="bg-slate-50">
     {% if user.is_authenticated %}
     <div class="min-h-screen">
+        <!-- Sync Indicator (Desktop Mode) -->
+        {% if is_desktop_mode %}
+        {% include "desktop/sync_indicator.html" %}
+        {% endif %}
+        
         <!-- Mobile Overlay -->
         <div id="sidebarOverlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-30 lg:hidden" onclick="closeMobileSidebar()"></div>
         

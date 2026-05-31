@@ -1,0 +1,65 @@
+{% if is_desktop_mode %}
+<!-- Indicador de estado de sincronización -->
+<div id="syncIndicator" class="fixed bottom-4 right-4 z-50">
+    <div class="flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-xs font-medium
+        {% if sync_is_online %}bg-emerald-100 text-emerald-800 border border-emerald-200
+        {% else %}bg-amber-100 text-amber-800 border border-amber-200{% endif %}">
+        
+        {% if sync_is_online %}
+            <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span>En línea</span>
+        {% else %}
+            <span class="w-2 h-2 bg-amber-500 rounded-full"></span>
+            <span>Modo offline</span>
+        {% endif %}
+        
+        {% if sync_pending_count > 0 %}
+            <span class="ml-1 px-1.5 py-0.5 bg-blue-500 text-white rounded-full text-[10px]">
+                {{ sync_pending_count }}
+            </span>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Verificar estado de conexión periódicamente
+(function() {
+    const indicator = document.getElementById('syncIndicator');
+    if (!indicator) return;
+    
+    function checkConnection() {
+        fetch('/api/sync/status/', { method: 'GET', cache: 'no-cache' })
+            .then(r => r.json())
+            .then(data => {
+                updateIndicator(data.is_online, data.pending_count);
+            })
+            .catch(() => {
+                updateIndicator(false, 0);
+            });
+    }
+    
+    function updateIndicator(isOnline, pendingCount) {
+        const div = indicator.querySelector('div');
+        const dot = indicator.querySelector('span:first-child');
+        const text = indicator.querySelectorAll('span')[1];
+        
+        if (isOnline) {
+            div.className = div.className.replace(/bg-amber-\d+/g, 'bg-emerald-100')
+                .replace(/text-amber-\d+/g, 'text-emerald-800')
+                .replace(/border-amber-\d+/g, 'border-emerald-200');
+            dot.className = 'w-2 h-2 bg-emerald-500 rounded-full animate-pulse';
+            text.textContent = 'En línea';
+        } else {
+            div.className = div.className.replace(/bg-emerald-\d+/g, 'bg-amber-100')
+                .replace(/text-emerald-\d+/g, 'text-amber-800')
+                .replace(/border-emerald-\d+/g, 'border-amber-200');
+            dot.className = 'w-2 h-2 bg-amber-500 rounded-full';
+            text.textContent = 'Modo offline';
+        }
+    }
+    
+    // Verificar cada 30 segundos
+    setInterval(checkConnection, 30000);
+})();
+</script>
+{% endif %}
