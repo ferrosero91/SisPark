@@ -37,6 +37,9 @@ media/backups/
 # Private storage (backups outside MEDIA_ROOT)
 private_storage/
 
+# Notas privadas
+NOTAS_PRIVADAS.md
+
 # IDE
 .vscode/
 .idea/
