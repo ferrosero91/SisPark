@@ -15,13 +15,17 @@ from parking.views import (
 
 
 def health_check(request):
-    """Endpoint para verificar el estado de la aplicación"""
+    """Endpoint para verificar el estado de la aplicación (solo acceso interno)"""
+    client_ip = request.META.get('REMOTE_ADDR', '')
+    allowed_prefixes = ['127.0.0.1', '::1', '172.', '10.', '192.168.']
+    if not any(client_ip.startswith(prefix) for prefix in allowed_prefixes):
+        return JsonResponse({'error': 'forbidden'}, status=403)
     return JsonResponse({'status': 'ok', 'app': 'solupark'})
 
 
 urlpatterns = [
     path('health/', health_check, name='health_check'),
-    path('admin/', admin.site.urls),
+    path('panel-gx-2026/', admin.site.urls),
     
     # Autenticación (nuevo sistema)
     path('', include('users.urls')),
@@ -63,4 +67,7 @@ urlpatterns = [
     path('gastos/crear/', expense_create, name='expense_create'),
     path('gastos/<uuid:pk>/eliminar/', expense_delete, name='expense_delete'),
     path('gastos/categorias/', expense_category_list, name='expense_category_list'),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -67,6 +67,8 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'SAMEORIGIN'
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+    CSRF_COOKIE_HTTPONLY = True
     
     # Referrer Policy
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
@@ -225,9 +227,10 @@ LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
 # Configuración de sesiones
-SESSION_COOKIE_AGE = 1209600  # 2 semanas
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_COOKIE_AGE = 28800  # 8 horas
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = True
 
 # ===========================================
 # INTERNATIONALIZATION
