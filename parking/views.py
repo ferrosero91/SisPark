@@ -443,6 +443,7 @@ def print_exit_ticket(request):
                 return render(request, 'parking/print_exit_ticket.html', {
                     'ticket': ticket,
                     'parking_lot': tenant,
+                    'duration': f"{ticket.get_duration()}h" if ticket.exit_time else '',
                     'amount_received': amount_received,
                     'change': change,
                     'is_cash': is_cash,

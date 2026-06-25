@@ -109,14 +109,24 @@ class VehicleCategory(TenantModel):
         if self.extended_hours and self.extended_rate:
             total = float(self.extended_rate)
             if hours > self.extended_hours:
-                extra_hours = math.ceil(hours - self.extended_hours)
+                extra_hours_raw = hours - self.extended_hours
+                # Tolerancia: fracciones menores a 1 minuto no cuentan como hora extra
+                if extra_hours_raw < (1 / 60):
+                    extra_hours = 0
+                else:
+                    extra_hours = math.ceil(extra_hours_raw)
                 total += extra_hours * float(self.additional_hour_rate)
             return round(total, 2)
         
         # Modo normal (primera hora + adicionales)
         total = float(self.first_hour_rate)
         if hours > 1:
-            additional_hours = math.ceil(hours - 1)
+            extra_hours_raw = hours - 1
+            # Tolerancia: fracciones menores a 1 minuto no cuentan como hora extra
+            if extra_hours_raw < (1 / 60):
+                additional_hours = 0
+            else:
+                additional_hours = math.ceil(extra_hours_raw)
             total += additional_hours * float(self.additional_hour_rate)
         return round(total, 2)
 

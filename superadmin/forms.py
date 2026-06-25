@@ -2,11 +2,15 @@
 Formularios del panel SuperAdmin.
 """
 from django import forms
+from django.utils import timezone
 from tenants.models import Tenant
 from users.models import User
+from .models import SystemAnnouncement
 
-INPUT_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500'
-SELECT_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500'
+INPUT_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+SELECT_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+TEXTAREA_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+CHECKBOX_CLASS = 'w-5 h-5 text-primary-600 border-slate-300 rounded focus:ring-primary-500'
 
 
 class TenantForm(forms.ModelForm):
@@ -70,5 +74,56 @@ class AdminPasswordChangeForm(forms.Form):
         
         if password and confirm and password != confirm:
             raise forms.ValidationError("Las contraseñas no coinciden")
+        
+        return cleaned_data
+
+
+class SystemAnnouncementForm(forms.ModelForm):
+    """Formulario para crear/editar anuncios del sistema."""
+    
+    class Meta:
+        model = SystemAnnouncement
+        fields = [
+            'title', 'message', 'announcement_type',
+            'starts_at', 'ends_at',
+            'is_global', 'target_tenants',
+            'is_active', 'is_dismissible',
+        ]
+        widgets = {
+            'title': forms.TextInput(attrs={
+                'class': INPUT_CLASS,
+                'placeholder': 'Ej: Mantenimiento programado'
+            }),
+            'message': forms.Textarea(attrs={
+                'class': TEXTAREA_CLASS,
+                'rows': 3,
+                'placeholder': 'Ej: El sistema estará en mantenimiento el sábado de 2am a 4am'
+            }),
+            'announcement_type': forms.Select(attrs={'class': SELECT_CLASS}),
+            'starts_at': forms.DateTimeInput(attrs={
+                'class': INPUT_CLASS,
+                'type': 'datetime-local'
+            }),
+            'ends_at': forms.DateTimeInput(attrs={
+                'class': INPUT_CLASS,
+                'type': 'datetime-local'
+            }),
+            'is_global': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASS}),
+            'target_tenants': forms.SelectMultiple(attrs={
+                'class': SELECT_CLASS,
+                'size': 5
+            }),
+            'is_active': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASS}),
+            'is_dismissible': forms.CheckboxInput(attrs={'class': CHECKBOX_CLASS}),
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        starts_at = cleaned_data.get('starts_at')
+        ends_at = cleaned_data.get('ends_at')
+        
+        if starts_at and ends_at:
+            if ends_at <= starts_at:
+                raise forms.ValidationError("La fecha de fin debe ser posterior a la de inicio.")
         
         return cleaned_data

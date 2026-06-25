@@ -1,0 +1,127 @@
+{% extends 'superadmin/base.html' %}
+
+{% block title %}{% if is_edit %}Editar{% else %}Crear{% endif %} Anuncio{% endblock %}
+{% block page_title %}{% if is_edit %}Editar{% else %}Nuevo{% endif %} Anuncio{% endblock %}
+{% block page_subtitle %}{% if is_edit %}Modificar anuncio existente{% else %}Crear un nuevo anuncio para los parqueaderos{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        
+        {% if form.errors %}
+        <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div class="flex items-center gap-2 text-red-700 font-medium text-sm mb-2">
+                <i class="fas fa-exclamation-circle"></i> Corrige los errores
+            </div>
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                <p class="text-sm text-red-600">{{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Contenido del anuncio -->
+        <div class="bg-white rounded-xl border border-slate-200 p-5 lg:p-6 space-y-4">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fas fa-edit text-primary-500"></i> Contenido
+            </h3>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1.5">Título</label>
+                {{ form.title }}
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1.5">Mensaje</label>
+                {{ form.message }}
+                <p class="text-xs text-slate-500 mt-1">Este es el texto que verán los usuarios en el banner.</p>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1.5">Tipo</label>
+                {{ form.announcement_type }}
+            </div>
+        </div>
+
+        <!-- Programación -->
+        <div class="bg-white rounded-xl border border-slate-200 p-5 lg:p-6 space-y-4">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fas fa-clock text-primary-500"></i> Programación
+            </h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Fecha inicio</label>
+                    {{ form.starts_at }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Fecha fin</label>
+                    {{ form.ends_at }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Alcance -->
+        <div class="bg-white rounded-xl border border-slate-200 p-5 lg:p-6 space-y-4">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fas fa-users text-primary-500"></i> Alcance
+            </h3>
+            
+            <div class="flex items-center gap-3">
+                {{ form.is_global }}
+                <label class="text-sm font-medium text-slate-700">Mostrar a todos los parqueaderos</label>
+            </div>
+            
+            <div id="targetTenantsSection">
+                <label class="block text-sm font-medium text-slate-700 mb-1.5">Parqueaderos específicos</label>
+                {{ form.target_tenants }}
+                <p class="text-xs text-slate-500 mt-1">Solo aplica si "Global" está desactivado. Ctrl+click para seleccionar varios.</p>
+            </div>
+        </div>
+
+        <!-- Opciones -->
+        <div class="bg-white rounded-xl border border-slate-200 p-5 lg:p-6 space-y-4">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i class="fas fa-cog text-primary-500"></i> Opciones
+            </h3>
+            
+            <div class="flex items-center gap-3">
+                {{ form.is_active }}
+                <label class="text-sm font-medium text-slate-700">Activo</label>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                {{ form.is_dismissible }}
+                <label class="text-sm font-medium text-slate-700">El usuario puede cerrar el banner</label>
+            </div>
+        </div>
+
+        <!-- Botones -->
+        <div class="flex items-center gap-3">
+            <button type="submit" class="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors font-medium">
+                <i class="fas fa-save mr-2"></i> {% if is_edit %}Guardar Cambios{% else %}Crear Anuncio{% endif %}
+            </button>
+            <a href="{% url 'superadmin:announcement_list' %}" class="px-6 py-3 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Toggle target tenants visibility based on is_global checkbox
+    const globalCheckbox = document.getElementById('{{ form.is_global.id_for_label }}');
+    const targetSection = document.getElementById('targetTenantsSection');
+    
+    function toggleTargetTenants() {
+        targetSection.style.display = globalCheckbox.checked ? 'none' : 'block';
+    }
+    
+    if (globalCheckbox) {
+        globalCheckbox.addEventListener('change', toggleTargetTenants);
+        toggleTargetTenants();
+    }
+</script>
+{% endblock %}

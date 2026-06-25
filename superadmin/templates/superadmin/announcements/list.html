@@ -1,0 +1,92 @@
+{% extends 'superadmin/base.html' %}
+
+{% block title %}Anuncios del Sistema{% endblock %}
+{% block page_title %}Anuncios del Sistema{% endblock %}
+{% block page_subtitle %}Gestiona mensajes y avisos para los parqueaderos{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <span class="inline-flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                <i class="fas fa-circle text-xs"></i> {{ active_count }} activo{{ active_count|pluralize:"s" }}
+            </span>
+        </div>
+        <a href="{% url 'superadmin:announcement_create' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors font-medium text-sm">
+            <i class="fas fa-plus"></i> Nuevo Anuncio
+        </a>
+    </div>
+
+    <!-- Lista -->
+    {% if announcements %}
+    <div class="space-y-3">
+        {% for announcement in announcements %}
+        <div class="bg-white rounded-xl border border-slate-200 p-4 lg:p-5 hover:shadow-md transition-shadow">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex items-start gap-3 flex-1 min-w-0">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 
+                        {% if announcement.announcement_type == 'critical' %}bg-red-100 text-red-600
+                        {% elif announcement.announcement_type == 'warning' %}bg-amber-100 text-amber-600
+                        {% elif announcement.announcement_type == 'maintenance' %}bg-indigo-100 text-indigo-600
+                        {% else %}bg-blue-100 text-blue-600{% endif %}">
+                        <i class="fas {% if announcement.announcement_type == 'critical' %}fa-exclamation-circle
+                            {% elif announcement.announcement_type == 'warning' %}fa-exclamation-triangle
+                            {% elif announcement.announcement_type == 'maintenance' %}fa-wrench
+                            {% else %}fa-info-circle{% endif %}"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-semibold text-slate-800 truncate">{{ announcement.title }}</h3>
+                        <p class="text-sm text-slate-600 mt-1">{{ announcement.message|truncatewords:20 }}</p>
+                        <div class="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                            <span><i class="fas fa-calendar mr-1"></i> {{ announcement.starts_at|date:"d/m/Y H:i" }} - {{ announcement.ends_at|date:"d/m/Y H:i" }}</span>
+                            <span>
+                                {% if announcement.is_global %}
+                                <i class="fas fa-globe mr-1"></i> Todos
+                                {% else %}
+                                <i class="fas fa-building mr-1"></i> {{ announcement.target_tenants.count }} parqueadero{{ announcement.target_tenants.count|pluralize:"s" }}
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    {% if announcement.is_currently_active %}
+                    <span class="px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-medium">Activo</span>
+                    {% elif not announcement.is_active %}
+                    <span class="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-medium">Inactivo</span>
+                    {% else %}
+                    <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">Programado</span>
+                    {% endif %}
+                    
+                    <a href="{% url 'superadmin:announcement_edit' announcement.pk %}" class="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary-600" title="Editar">
+                        <i class="fas fa-pen text-sm"></i>
+                    </a>
+                    <form action="{% url 'superadmin:announcement_toggle' announcement.pk %}" method="post" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-amber-600" title="{% if announcement.is_active %}Desactivar{% else %}Activar{% endif %}">
+                            <i class="fas {% if announcement.is_active %}fa-eye-slash{% else %}fa-eye{% endif %} text-sm"></i>
+                        </button>
+                    </form>
+                    <a href="{% url 'superadmin:announcement_delete' announcement.pk %}" class="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600" title="Eliminar">
+                        <i class="fas fa-trash text-sm"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-xl border border-slate-200 p-8 lg:p-12 text-center">
+        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-bullhorn text-2xl text-slate-400"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">No hay anuncios</h3>
+        <p class="text-slate-500 mb-4">Crea tu primer anuncio para notificar a los parqueaderos.</p>
+        <a href="{% url 'superadmin:announcement_create' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors font-medium text-sm">
+            <i class="fas fa-plus"></i> Crear Anuncio
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

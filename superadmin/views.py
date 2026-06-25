@@ -11,7 +11,8 @@ from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from tenants.models import Tenant, SubscriptionPlan, SubscriptionPayment
 from users.models import User
-from .forms import TenantForm, TenantCreateForm, AdminPasswordChangeForm
+from .forms import TenantForm, TenantCreateForm, AdminPasswordChangeForm, SystemAnnouncementForm
+from .models import SystemAnnouncement
 from permissions.decorators import superadmin_required
 
 
@@ -716,3 +717,100 @@ def backup_restore_sql(request):
                 os.unlink(tmp_path)
     
     return redirect('superadmin:backup_dashboard')
+
+
+# ===========================================
+# Anuncios del Sistema
+# ===========================================
+
+@login_required
+@superadmin_required
+def announcement_list(request):
+    """Lista de anuncios del sistema."""
+    announcements = SystemAnnouncement.objects.all()
+    context = {
+        'announcements': announcements,
+        'active_count': announcements.filter(
+            is_active=True,
+            starts_at__lte=timezone.now(),
+            ends_at__gte=timezone.now(),
+        ).count(),
+    }
+    return render(request, 'superadmin/announcements/list.html', context)
+
+
+@login_required
+@superadmin_required
+def announcement_create(request):
+    """Crear nuevo anuncio."""
+    if request.method == 'POST':
+        form = SystemAnnouncementForm(request.POST)
+        if form.is_valid():
+            announcement = form.save(commit=False)
+            announcement.created_by = request.user
+            announcement.save()
+            form.save_m2m()  # Guardar relación ManyToMany
+            messages.success(request, f'Anuncio "{announcement.title}" creado correctamente.')
+            return redirect('superadmin:announcement_list')
+    else:
+        form = SystemAnnouncementForm(initial={
+            'starts_at': timezone.now(),
+            'ends_at': timezone.now() + timedelta(days=7),
+        })
+    
+    return render(request, 'superadmin/announcements/form.html', {
+        'form': form,
+        'is_edit': False,
+    })
+
+
+@login_required
+@superadmin_required
+def announcement_edit(request, pk):
+    """Editar anuncio existente."""
+    announcement = get_object_or_404(SystemAnnouncement, pk=pk)
+    
+    if request.method == 'POST':
+        form = SystemAnnouncementForm(request.POST, instance=announcement)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Anuncio "{announcement.title}" actualizado.')
+            return redirect('superadmin:announcement_list')
+    else:
+        form = SystemAnnouncementForm(instance=announcement)
+    
+    return render(request, 'superadmin/announcements/form.html', {
+        'form': form,
+        'announcement': announcement,
+        'is_edit': True,
+    })
+
+
+@login_required
+@superadmin_required
+def announcement_delete(request, pk):
+    """Eliminar anuncio."""
+    announcement = get_object_or_404(SystemAnnouncement, pk=pk)
+    
+    if request.method == 'POST':
+        title = announcement.title
+        announcement.delete()
+        messages.success(request, f'Anuncio "{title}" eliminado.')
+        return redirect('superadmin:announcement_list')
+    
+    return render(request, 'superadmin/announcements/confirm_delete.html', {
+        'announcement': announcement,
+    })
+
+
+@login_required
+@superadmin_required
+def announcement_toggle(request, pk):
+    """Activar/desactivar anuncio."""
+    announcement = get_object_or_404(SystemAnnouncement, pk=pk)
+    announcement.is_active = not announcement.is_active
+    announcement.save(update_fields=['is_active'])
+    
+    status = "activado" if announcement.is_active else "desactivado"
+    messages.success(request, f'Anuncio "{announcement.title}" {status}.')
+    return redirect('superadmin:announcement_list')

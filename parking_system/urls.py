@@ -12,6 +12,7 @@ from parking.views import (
     abrir_turno,
     expense_list, expense_create, expense_delete, expense_category_list
 )
+from superadmin.announcement_views import dismiss_announcement
 
 
 def health_check(request):
@@ -67,6 +68,9 @@ urlpatterns = [
     path('gastos/crear/', expense_create, name='expense_create'),
     path('gastos/<uuid:pk>/eliminar/', expense_delete, name='expense_delete'),
     path('gastos/categorias/', expense_category_list, name='expense_category_list'),
+    
+    # Anuncios (dismiss por usuario)
+    path('anuncio/<uuid:announcement_id>/cerrar/', dismiss_announcement, name='dismiss_announcement'),
 ]
 
 if settings.DEBUG:

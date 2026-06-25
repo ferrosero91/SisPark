@@ -24,6 +24,13 @@ urlpatterns = [
     path('planes/', views.subscription_plans, name='subscription_plans'),
     path('pagos/', views.subscription_payments, name='subscription_payments'),
     
+    # Anuncios del Sistema
+    path('anuncios/', views.announcement_list, name='announcement_list'),
+    path('anuncios/crear/', views.announcement_create, name='announcement_create'),
+    path('anuncios/<uuid:pk>/editar/', views.announcement_edit, name='announcement_edit'),
+    path('anuncios/<uuid:pk>/eliminar/', views.announcement_delete, name='announcement_delete'),
+    path('anuncios/<uuid:pk>/toggle/', views.announcement_toggle, name='announcement_toggle'),
+    
     # Backup y Restauración
     path('backup/', views.backup_dashboard, name='backup_dashboard'),
     path('backup/sistema/crear/', views.backup_create_system, name='backup_create_system'),

@@ -1,0 +1,36 @@
+{% extends 'superadmin/base.html' %}
+
+{% block title %}Eliminar Anuncio{% endblock %}
+{% block page_title %}Eliminar Anuncio{% endblock %}
+{% block page_subtitle %}Esta acción no se puede deshacer{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+    <div class="bg-white rounded-xl border border-red-200 p-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <i class="fas fa-trash text-red-600 text-lg"></i>
+            </div>
+            <div>
+                <h3 class="font-semibold text-slate-800">¿Eliminar este anuncio?</h3>
+                <p class="text-sm text-slate-500">Se eliminará permanentemente.</p>
+            </div>
+        </div>
+        
+        <div class="bg-slate-50 rounded-lg p-4 mb-6">
+            <p class="font-medium text-slate-800">{{ announcement.title }}</p>
+            <p class="text-sm text-slate-600 mt-1">{{ announcement.message|truncatewords:30 }}</p>
+        </div>
+        
+        <form method="post" class="flex items-center gap-3">
+            {% csrf_token %}
+            <button type="submit" class="px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium text-sm">
+                <i class="fas fa-trash mr-2"></i> Sí, Eliminar
+            </button>
+            <a href="{% url 'superadmin:announcement_list' %}" class="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors font-medium text-sm">
+                Cancelar
+            </a>
+        </form>
+    </div>
+</div>
+{% endblock %}

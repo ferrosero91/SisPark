@@ -223,6 +223,21 @@
                 {% endif %}
             {% endif %}
             
+            <!-- Anuncios del Sistema -->
+            {% for announcement in system_announcements %}
+            <div id="announcement-{{ announcement.id }}" class="{% if announcement.announcement_type == 'critical' %}bg-red-600{% elif announcement.announcement_type == 'warning' %}bg-amber-500{% elif announcement.announcement_type == 'maintenance' %}bg-indigo-600{% else %}bg-blue-600{% endif %} text-white px-4 lg:px-6 py-2 lg:py-3 flex items-center justify-between text-sm">
+                <div class="flex items-center gap-2 lg:gap-3">
+                    <i class="fas {% if announcement.announcement_type == 'critical' %}fa-exclamation-circle{% elif announcement.announcement_type == 'warning' %}fa-exclamation-triangle{% elif announcement.announcement_type == 'maintenance' %}fa-wrench{% else %}fa-info-circle{% endif %}"></i>
+                    <span class="font-medium">{{ announcement.message }}</span>
+                </div>
+                {% if announcement.is_dismissible %}
+                <button onclick="dismissAnnouncement('{{ announcement.id }}')" class="ml-3 p-1 hover:bg-white/20 rounded-lg transition-colors" title="Cerrar">
+                    <i class="fas fa-times"></i>
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+            
             <!-- Alerta de turno -->
             {% if show_turno_alert %}
             <div class="bg-violet-600 text-white px-4 lg:px-6 py-2 lg:py-3 flex items-center justify-between text-sm">
@@ -294,6 +309,24 @@
                 document.getElementById('userMenu').classList.remove('show');
             }
         });
+        
+        function dismissAnnouncement(announcementId) {
+            fetch('/anuncio/' + announcementId + '/cerrar/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken'),
+                    'Content-Type': 'application/json',
+                },
+            }).then(function() {
+                var el = document.getElementById('announcement-' + announcementId);
+                if (el) el.remove();
+            });
+        }
+        function getCookie(name) {
+            var value = '; ' + document.cookie;
+            var parts = value.split('; ' + name + '=');
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
     </script>
     {% endif %}
 </body>
