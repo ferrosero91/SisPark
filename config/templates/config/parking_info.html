@@ -53,6 +53,18 @@
                 <input type="text" name="city" value="{{ tenant.city }}"
                        class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
             </div>
+            
+            <div class="border-t border-slate-200 pt-5">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="is_residential" 
+                           {% if tenant.is_residential %}checked{% endif %}
+                           class="w-5 h-5 text-sky-600 border-slate-300 rounded focus:ring-sky-500">
+                    <div>
+                        <span class="text-sm font-medium text-slate-700">Es conjunto residencial</span>
+                        <p class="text-xs text-slate-500 mt-0.5">Active esta opción si el parqueadero pertenece a un conjunto residencial. Se habilitarán campos adicionales (apartamento y teléfono) en el registro de entrada.</p>
+                    </div>
+                </label>
+            </div>
         </div>
         
         <div class="flex gap-4">

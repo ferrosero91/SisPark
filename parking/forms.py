@@ -9,13 +9,15 @@ SELECT_CLASS = 'w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2
 class ParkingTicketForm(forms.ModelForm):
     class Meta:
         model = ParkingTicket
-        fields = ['category', 'placa', 'color', 'marca', 'cascos']
+        fields = ['category', 'placa', 'color', 'marca', 'cascos', 'apartment', 'contact_phone']
         labels = {
             'category': 'Categoría',
             'placa': 'Placa',
             'color': 'Color',
             'marca': 'Marca',
             'cascos': 'Número de cascos',
+            'apartment': 'Apartamento',
+            'contact_phone': 'Teléfono de contacto',
         }
         widgets = {
             'category': forms.Select(attrs={'class': SELECT_CLASS}),
@@ -23,6 +25,8 @@ class ParkingTicketForm(forms.ModelForm):
             'color': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: Rojo'}),
             'marca': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: Chevrolet'}),
             'cascos': forms.NumberInput(attrs={'class': INPUT_CLASS, 'min': '0', 'max': '2'}),
+            'apartment': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: 301'}),
+            'contact_phone': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej: 3156544580'}),
         }
 
     def __init__(self, *args, tenant=None, **kwargs):
@@ -30,10 +34,18 @@ class ParkingTicketForm(forms.ModelForm):
         self.fields['color'].required = False
         self.fields['marca'].required = False
         self.fields['cascos'].required = False
+        self.fields['apartment'].required = False
+        self.fields['contact_phone'].required = False
+        self.tenant = tenant
         
         if tenant:
             # Usar all_tenants() para evitar el filtro automático del TenantManager
             self.fields['category'].queryset = VehicleCategory.objects.all_tenants().filter(tenant=tenant)
+            
+            # Ocultar campos de apartamento si no es conjunto residencial
+            if not tenant.is_residential:
+                self.fields['apartment'].widget = forms.HiddenInput()
+                self.fields['contact_phone'].widget = forms.HiddenInput()
         else:
             self.fields['category'].queryset = VehicleCategory.objects.none()
 
@@ -41,10 +53,16 @@ class ParkingTicketForm(forms.ModelForm):
         cleaned_data = super().clean()
         category = cleaned_data.get('category')
         cascos = cleaned_data.get('cascos')
+        apartment = cleaned_data.get('apartment')
 
         if category and category.name.upper() in ['MOTOS', 'MOTO']:
             if cascos is None:
                 self.add_error('cascos', 'El número de cascos es obligatorio para motos')
+        
+        # Validar apartamento si es conjunto residencial
+        if self.tenant and self.tenant.is_residential:
+            if not apartment:
+                self.add_error('apartment', 'El número de apartamento es obligatorio para conjuntos residenciales.')
         
         return cleaned_data
 
@@ -125,7 +143,7 @@ class CategoryForm(forms.ModelForm):
                 cleaned_data['minute_rate'] = 0
         else:
             # Modo normal por hora: requiere ambas tarifas
-            if not first_hour_rate or first_hour_rate <= 0:
+            if first_hour_rate is None or first_hour_rate < 0:
                 self.add_error('first_hour_rate', 'Debe especificar una tarifa de primera hora válida.')
             if not additional_hour_rate or additional_hour_rate <= 0:
                 self.add_error('additional_hour_rate', 'Debe especificar una tarifa de hora adicional válida.')

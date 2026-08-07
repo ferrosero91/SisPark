@@ -46,6 +46,11 @@ class ParkingInfoForm(forms.Form):
         required=False,
         label="Ciudad"
     )
+    is_residential = forms.BooleanField(
+        required=False,
+        label="Es conjunto residencial",
+        help_text="Active esta opción si el parqueadero pertenece a un conjunto residencial"
+    )
 
     def clean_phone(self):
         """Validate phone contains only digits, +, -, and spaces."""
