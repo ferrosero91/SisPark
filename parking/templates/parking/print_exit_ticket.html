@@ -188,6 +188,18 @@
             <span class="label">Pago:</span>
             <span class="value">{{ ticket.payment_method.name|default:"Efectivo" }}</span>
         </div>
+        {% if ticket.apartment %}
+        <div class="info-row">
+            <span class="label">Apto:</span>
+            <span class="value">{{ ticket.apartment }}</span>
+        </div>
+        {% endif %}
+        {% if ticket.contact_phone %}
+        <div class="info-row">
+            <span class="label">Tel:</span>
+            <span class="value">{{ ticket.contact_phone }}</span>
+        </div>
+        {% endif %}
         
         <div class="divider-solid"></div>
         

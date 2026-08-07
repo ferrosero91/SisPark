@@ -55,6 +55,7 @@ def parking_info(request):
             tenant.email = form.cleaned_data['email']
             tenant.address = form.cleaned_data['address']
             tenant.city = form.cleaned_data['city']
+            tenant.is_residential = form.cleaned_data['is_residential']
             tenant.save()
             messages.success(request, 'Información actualizada correctamente')
             return redirect('config_parking_info')
@@ -71,6 +72,7 @@ def parking_info(request):
             'email': tenant.email,
             'address': tenant.address,
             'city': tenant.city,
+            'is_residential': tenant.is_residential,
         })
     
     return render(request, 'config/parking_info.html', {'tenant': tenant, 'form': form})

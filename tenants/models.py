@@ -97,6 +97,13 @@ class Tenant(models.Model):
         verbose_name="Logo"
     )
     
+    # Tipo de parqueadero
+    is_residential = models.BooleanField(
+        default=False,
+        verbose_name="Es conjunto residencial",
+        help_text="Active esta opción si el parqueadero pertenece a un conjunto residencial"
+    )
+    
     # Estado y configuración
     status = models.CharField(
         max_length=20, 
